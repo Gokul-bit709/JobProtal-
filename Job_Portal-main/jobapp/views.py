@@ -655,3 +655,108 @@ class EmployerInitiateChatView(APIView):
             'status': 'Conversation exists',
             'conversation_id': conversation.id
         })    
+    
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import ChatMessage
+from .serializers import ChatMessageSerializer
+ 
+ 
+def generate_bot_reply(user_text):
+    """
+    Simple rule-based bot logic
+    """
+    text = user_text.lower()
+ 
+    if "login" in text:
+        return "You can login as a jobseeker by clicking Login → Jobseeker and using your registered email and password."
+ 
+    elif "job" in text:
+        return "You can browse jobs in the Jobs section from the dashboard."
+ 
+    elif "register" in text:
+        return "Click on Register and fill in your details to create an account."
+ 
+    return "Please tell me more so I can assist you better."
+ 
+ 
+@api_view(["POST"])
+def chat_api(request):
+    user_message = request.data.get("message")
+ 
+    if not user_message:
+        return Response({"error": "Message is required"}, status=400)
+ 
+    # Save user message
+    user_msg = ChatMessage.objects.create(
+        sender="user",
+        message=user_message
+    )
+ 
+    # Generate bot reply
+    bot_reply_text = generate_bot_reply(user_message)
+ 
+    # Save bot reply
+    bot_msg = ChatMessage.objects.create(
+        sender="bot",
+        message=bot_reply_text
+    )
+ 
+    return Response({
+        "user": ChatMessageSerializer(user_msg).data,
+        "bot": ChatMessageSerializer(bot_msg).data
+    })
+ 
+
+
+
+
+ 
+from rest_framework.views import APIView
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+ 
+from .models import HelpTopic, RaiseTicket
+from .serializers import HelpTopicSerializer, RaiseTicketSerializer
+ 
+ 
+# Help Topics List API
+@api_view(['GET'])
+def help_topics(request):
+    topics = HelpTopic.objects.all().order_by('-id')
+    serializer = HelpTopicSerializer(topics, many=True)
+    return Response({
+        "status": True,
+        "message": "Help topics fetched successfully",
+        "data": serializer.data
+    })
+ 
+ 
+#  Raise Ticket Create API
+class RaiseTicketCreateView(APIView):
+ 
+ 
+    def get(self, request):
+        return Response({
+            "status": True,
+            "message": "Raise Ticket API Working"
+        })
+ 
+    # Ticket Create
+    def post(self, request):
+        serializer = RaiseTicketSerializer(data=request.data)
+ 
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "status": True,
+                "message": "Ticket submitted successfully",
+                "data": serializer.data
+            }, status=status.HTTP_201_CREATED)
+ 
+        return Response({
+            "status": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+ 

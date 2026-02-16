@@ -668,4 +668,26 @@ class ConversationSerializer(serializers.ModelSerializer):
             else:
                 return "Waiting for employer to respond"
             
-            
+        
+from rest_framework import serializers
+from .models import ChatMessage
+ 
+ 
+class ChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatMessage
+        fields = "__all__"
+
+from rest_framework import serializers
+from .models import HelpTopic
+from .models import RaiseTicket
+ 
+class HelpTopicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HelpTopic
+        fields = ['id', 'title', 'path']
+ 
+class RaiseTicketSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RaiseTicket
+        fields = '__all__'

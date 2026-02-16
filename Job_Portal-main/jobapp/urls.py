@@ -17,6 +17,7 @@ from .views import (
     MarkMessageReadView,
     ChatUsersView,
     EmployerInitiateChatView,
+    chat_api,
 )
 from . import views
  
@@ -79,4 +80,13 @@ urlpatterns = [
     path('chat/with-user/', ConversationWithUserView.as_view(), name='chat-with-user'),
     path('chat/users/', ChatUsersView.as_view(), name='chat-users'),
     path('chat/employer/initiate/', EmployerInitiateChatView.as_view(), name='employer-initiate-chat'),
+    path("chat/", chat_api, name="chat_api"),
+
+]
+from django.urls import path
+from .views import help_topics, RaiseTicketCreateView
+ 
+urlpatterns = [
+    path('help-topics/', help_topics, name='help-topics'),
+    path('raise-ticket/', RaiseTicketCreateView.as_view(), name='raise-ticket'),
 ]

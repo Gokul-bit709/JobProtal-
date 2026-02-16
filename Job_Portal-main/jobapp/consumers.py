@@ -106,3 +106,71 @@ class JobChatConsumer(AsyncWebsocketConsumer):
         )
         
         return message
+    
+import json
+from channels.generic.websocket import AsyncWebsocketConsumer
+ 
+ 
+def generate_bot_reply(user_text):
+    text = user_text.lower()
+ 
+    if "login" in text:
+        return "You can login as a jobseeker by clicking Login → Jobseeker."
+ 
+    elif "job" in text:
+        return "Browse available jobs in the Jobs section."
+ 
+    return "Please tell me more so I can assist you better."
+ 
+ 
+class ChatConsumer(AsyncWebsocketConsumer):
+ 
+    async def connect(self):
+        self.room_group_name = "live_chat"
+ 
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+ 
+        await self.accept()
+ 
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+ 
+    async def receive(self, text_data):
+        data = json.loads(text_data)
+        message = data["message"]
+ 
+        # Send user message back
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                "type": "chat_message",
+                "sender": "user",
+                "message": message,
+            }
+        )
+ 
+        # Generate bot reply
+        bot_reply = generate_bot_reply(message)
+ 
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                "type": "chat_message",
+                "sender": "bot",
+                "message": bot_reply,
+            }
+        )
+ 
+    async def chat_message(self, event):
+        await self.send(text_data=json.dumps({
+            "sender": event["sender"],
+            "message": event["message"],
+        }))
+ 
+ 

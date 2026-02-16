@@ -523,3 +523,71 @@ class Message(models.Model):
                 self.conversation.initiated_by = self.sender
                 self.conversation.save()
         super().save(*args, **kwargs)    
+
+
+from django.db import models
+ 
+ 
+class ChatMessage(models.Model):
+    USER = "user"
+    BOT = "bot"
+ 
+    SENDER_CHOICES = [
+        (USER, "User"),
+        (BOT, "Bot"),
+    ]
+ 
+    sender = models.CharField(max_length=10, choices=SENDER_CHOICES)
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    def __str__(self):
+        return f"{self.sender}: {self.message[:30]}"
+    
+from django.db import models
+ 
+class HelpTopic(models.Model):
+    title = models.CharField(max_length=200)
+    path = models.CharField(max_length=200)
+ 
+    def __str__(self):
+        return self.title
+   
+ 
+ 
+ 
+ 
+class RaiseTicket(models.Model):
+ 
+    CATEGORY_CHOICES = (
+        ('Jobseeker', 'Jobseeker'),
+        ('Employer', 'Employer'),
+    )
+ 
+    SUBJECT_CHOICES = (
+        ("Broken 'Apply' Button/Application Failure", "Broken 'Apply' Button/Application Failure"),
+        ("File Upload/Resume Parsing Errors", "File Upload/Resume Parsing Errors"),
+        ("Outdated or Ghost Job Listings", "Outdated or Ghost Job Listings"),
+        ("Incorrect/Irrelevant Search Results & Filters", "Incorrect/Irrelevant Search Results & Filters"),
+        ("Profile Update/Saved Data Not Saving", "Profile Update/Saved Data Not Saving"),
+        ("Application Status Unchanged/Limbo", "Application Status Unchanged/Limbo"),
+        ("Broken Job Alerts & Notifications", "Broken Job Alerts & Notifications"),
+        ("Login/Registration Issues (Social Login Bugs)", "Login/Registration Issues (Social Login Bugs)"),
+        ("Site Incompatibility/Non-Responsive Mobile Layout", "Site Incompatibility/Non-Responsive Mobile Layout"),
+        ("Duplicate Job Listings (Spam)", "Duplicate Job Listings (Spam)"),
+        ("Others", "Others"),
+    )
+ 
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    subject = models.CharField(max_length=255, choices=SUBJECT_CHOICES)
+    name = models.CharField(max_length=150)
+    email = models.EmailField()
+    phone = models.CharField(max_length=20)
+    message = models.TextField(blank=True, null=True)
+    attachment = models.FileField(upload_to='tickets/', blank=True, null=True)
+ 
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    def __str__(self):
+        return f"{self.name} - {self.subject}"
+ 
