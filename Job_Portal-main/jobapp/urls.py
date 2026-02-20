@@ -19,7 +19,7 @@ from .views import (
     EmployerInitiateChatView,
     chat_api,
 )
-from . import views
+from . import views 
  
 
 urlpatterns = [
