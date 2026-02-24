@@ -660,24 +660,52 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from .models import ChatMessage
 from .serializers import ChatMessageSerializer
- 
- 
+import random
+
 def generate_bot_reply(user_text):
     """
-    Simple rule-based bot logic
+    Enhanced rule-based bot with dynamic responses
     """
     text = user_text.lower()
- 
+
+    login_responses = [
+        "You can log in as a jobseeker by clicking Login → Jobseeker and entering your registered email and password.",
+        "To access your account, go to the Login page and choose the Jobseeker option.",
+        "Simply click on Login, select your role, and enter your credentials to continue.",
+        "Use your registered email and password in the Login section to access your dashboard."
+    ]
+
+    job_responses = [
+        "You can browse available jobs from the Jobs section on your dashboard.",
+        "Head over to the Jobs tab to explore current openings.",
+        "All listed opportunities are available under the Jobs section.",
+        "Visit the dashboard and click on Jobs to see matching positions."
+    ]
+
+    register_responses = [
+        "Click on Register and fill in your details to create an account.",
+        "To get started, select Register and complete the signup form.",
+        "Choose Register, provide your information, and submit the form.",
+        "You can create a new account by clicking the Register button."
+    ]
+
+    default_responses = [
+        "Could you please provide more details so I can assist you better?",
+        "I'm here to help. Can you clarify your question?",
+        "Let me know a bit more information so I can guide you properly.",
+        "Can you explain your concern in more detail?"
+    ]
+
     if "login" in text:
-        return "You can login as a jobseeker by clicking Login → Jobseeker and using your registered email and password."
- 
+        return random.choice(login_responses)
+
     elif "job" in text:
-        return "You can browse jobs in the Jobs section from the dashboard."
- 
+        return random.choice(job_responses)
+
     elif "register" in text:
-        return "Click on Register and fill in your details to create an account."
- 
-    return "Please tell me more so I can assist you better."
+        return random.choice(register_responses)
+
+    return random.choice(default_responses)
  
  
 @api_view(["POST"])
