@@ -18,6 +18,11 @@ from .views import (
     ChatUsersView,
     EmployerInitiateChatView,
     chat_api,
+    ForgotPasswordView,
+    ResetPasswordConfirmView,
+    CreatePasswordView,
+    ValidateResetTokenView,
+    AdminCreatePasswordTokenView,
 )
 from . import views 
  
@@ -81,6 +86,12 @@ urlpatterns = [
     path('chat/users/', ChatUsersView.as_view(), name='chat-users'),
     path('chat/employer/initiate/', EmployerInitiateChatView.as_view(), name='employer-initiate-chat'),
     path("chat/", chat_api, name="chat_api"),
+    # Password
+    path('auth/forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
+    path('auth/reset-password-confirm/', ResetPasswordConfirmView.as_view(), name='reset-password-confirm'),
+    path('auth/create-password/', CreatePasswordView.as_view(), name='create-password'),
+    path('auth/validate-reset-token/', ValidateResetTokenView.as_view(), name='validate-reset-token'),
+    path('admin/create-password-token/', AdminCreatePasswordTokenView.as_view(), name='admin-create-password-token'),
 
 ]
 from django.urls import path

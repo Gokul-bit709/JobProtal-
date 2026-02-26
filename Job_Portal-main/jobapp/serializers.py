@@ -691,3 +691,43 @@ class RaiseTicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = RaiseTicket
         fields = '__all__'
+
+
+# Password Serializer
+ 
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+ 
+    def validate_email(self, value):
+        try:
+            user = User.objects.get(email=value)
+            if not user.is_active:
+                raise serializers.ValidationError("This account is inactive.")
+            self.context['user'] = user
+        except User.DoesNotExist:
+            raise serializers.ValidationError("No user found with this email address.")
+        return value
+ 
+ 
+class ResetPasswordConfirmSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, min_length=8)
+ 
+    def validate(self, data):
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        return data
+ 
+ 
+class CreatePasswordSerializer(serializers.Serializer):
+    token = serializers.CharField()
+    new_password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, min_length=8)
+ 
+    def validate(self, data):
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        return data            
+ 
+ 
