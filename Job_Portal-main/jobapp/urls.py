@@ -23,6 +23,8 @@ from .views import (
     CreatePasswordView,
     ValidateResetTokenView,
     AdminCreatePasswordTokenView,
+    help_topics, 
+    RaiseTicketCreateView
 )
 from . import views 
  
@@ -92,12 +94,8 @@ urlpatterns = [
     path('auth/create-password/', CreatePasswordView.as_view(), name='create-password'),
     path('auth/validate-reset-token/', ValidateResetTokenView.as_view(), name='validate-reset-token'),
     path('admin/create-password-token/', AdminCreatePasswordTokenView.as_view(), name='admin-create-password-token'),
-
-]
-from django.urls import path
-from .views import help_topics, RaiseTicketCreateView
- 
-urlpatterns = [
     path('help-topics/', help_topics, name='help-topics'),
     path('raise-ticket/', RaiseTicketCreateView.as_view(), name='raise-ticket'),
+
 ]
+ 

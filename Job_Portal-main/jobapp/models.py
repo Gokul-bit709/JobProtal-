@@ -309,6 +309,7 @@ class Company(models.Model):
     )
     name = models.CharField(max_length=200, unique=True)
     logo = models.ImageField(upload_to='company_logos/', null=True, blank=True)
+    is_top_company = models.BooleanField(default=False)
     slogan = models.CharField(max_length=200, blank=True)
     rating = models.DecimalField(max_digits=3, decimal_places=1, default=0.0)
     company_overview = models.TextField(blank=True)
