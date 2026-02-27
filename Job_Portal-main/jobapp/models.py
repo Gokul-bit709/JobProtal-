@@ -388,6 +388,7 @@ class Job(models.Model):
         HYBRID = 'Hybrid', 'Hybrid'
 
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='jobs')
+    logo = models.ImageField(upload_to='jobs_logos/', null=True, blank=True)
     title = models.CharField(max_length=255)
     location = models.CharField(max_length=255)
     job_type = models.CharField(max_length=20, choices=JobType.choices, blank=True)
