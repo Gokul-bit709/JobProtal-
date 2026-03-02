@@ -679,13 +679,9 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 from rest_framework import serializers
-from .models import HelpTopic
 from .models import RaiseTicket
  
-class HelpTopicSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = HelpTopic
-        fields = ['id', 'title', 'path']
+ 
  
 class RaiseTicketSerializer(serializers.ModelSerializer):
     class Meta:

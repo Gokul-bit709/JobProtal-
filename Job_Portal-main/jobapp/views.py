@@ -745,21 +745,10 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
- 
-from .models import HelpTopic, RaiseTicket 
-from .serializers import HelpTopicSerializer, RaiseTicketSerializer
+from .serializers import   RaiseTicketSerializer
  
  
-# Help Topics List API
-@api_view(['GET'])
-def help_topics(request):
-    topics = HelpTopic.objects.all().order_by('-id')
-    serializer = HelpTopicSerializer(topics, many=True)
-    return Response({
-        "status": True,
-        "message": "Help topics fetched successfully",
-        "data": serializer.data
-    })
+ 
  
  
 #  Raise Ticket Create API
