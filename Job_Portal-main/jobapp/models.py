@@ -614,4 +614,14 @@ class PasswordResetToken(models.Model):
         if not self.expires_at:
             self.expires_at = timezone.now() + timedelta(hours=24)
         super().save(*args, **kwargs)
+
+
+class ContactMessage(models.Model):
+    name = models.CharField(max_length=150)
+    email = models.EmailField()
+    contact = models.CharField(max_length=15)
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
  
+    def __str__(self):
+        return f"{self.name} - {self.email}"

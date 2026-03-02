@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
+    ContactMessageCreateAPIView,
     JobSeekerRegistrationView,
     EmployerRegistrationView,
     LoginView,
@@ -96,6 +97,7 @@ urlpatterns = [
     path('admin/create-password-token/', AdminCreatePasswordTokenView.as_view(), name='admin-create-password-token'),
     path('help-topics/', help_topics, name='help-topics'),
     path('raise-ticket/', RaiseTicketCreateView.as_view(), name='raise-ticket'),
+    path('contact/', ContactMessageCreateAPIView.as_view(), name='contact-message'),
 
 ]
  

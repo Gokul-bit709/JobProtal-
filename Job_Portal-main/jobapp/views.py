@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import (
+    ContactMessageSerializer,
     JobSeekerRegistrationSerializer,
     EmployerRegistrationSerializer,
     JobSeekerProfileReadSerializer,
@@ -993,4 +994,14 @@ class AdminCreatePasswordTokenView(APIView):
             return Response({
                 "error": "User not found."
             }, status=status.HTTP_404_NOT_FOUND)    
- 
+
+class ContactMessageCreateAPIView(APIView):
+    def post(self, request):
+        serializer = ContactMessageSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {"message": "Message sent successfully"},
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

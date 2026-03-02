@@ -18,6 +18,7 @@ from .models import (
     ChatMessage,
     HelpTopic,
     RaiseTicket,
+    ContactMessage,
 )
 
 # -------------------------
@@ -216,3 +217,9 @@ class ActiveUserAdmin(admin.ModelAdmin):
 
 admin.site.register(Session, ActiveUserAdmin)
  
+@admin.register(ContactMessage)
+class ContactMessageAdmin(admin.ModelAdmin):
+    list_display = ("name", "email", "contact","message", "created_at")
+    search_fields = ("name", "email", "contact")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
