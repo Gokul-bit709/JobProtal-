@@ -7,22 +7,27 @@ def generate_token():
     return secrets.token_urlsafe(32)
  
 def send_password_reset_email(user, token, request):
-    """Send password reset email"""
-    reset_link = f"{request.scheme}://{request.get_host()}/reset-password?token={token}"
+    """Send password reset email with token separate from URL"""
+   
+    frontend_url = settings.FRONTEND_URL
+    reset_page = f"{frontend_url}/Job-portal/jobseeker/login/forgotpassword/createpassword"
    
     subject = 'Password Reset Request'
     message = f"""
-    Hello {user.username},
-   
-    We received a request to reset your password.
-   
-    Click the link below to reset your password:
-    {reset_link}
-   
-    This link will expire in 24 hours.
-   
-    If you didn't request this, please ignore this email.
-    """
+Hello {user.username},
+ 
+We received a request to reset your password for {user.email}.
+ 
+Please visit this link:
+{reset_page}
+ 
+And enter this token on the page:
+{token}
+ 
+This token will expire in 24 hours.
+ 
+If you didn't request this, please ignore this email.
+"""
    
     send_mail(
         subject,
@@ -31,3 +36,4 @@ def send_password_reset_email(user, token, request):
         [user.email],
         fail_silently=False,
     )
+ 

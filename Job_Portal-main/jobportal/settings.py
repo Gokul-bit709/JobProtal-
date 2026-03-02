@@ -179,4 +179,5 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels.layers.InMemoryChannelLayer'  
     }
 }
- 
+
+FRONTEND_URL = 'http://localhost:5173'
