@@ -3,35 +3,35 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 import uuid
-
-
+ 
+ 
 class User(AbstractUser):
     class UserType(models.TextChoices):
         ADMIN = 'admin', 'Admin'
         EMPLOYER = 'employer', 'Employer'
         JOBSEEKER = 'jobseeker', 'Jobseeker'
-
-    user_type = models.CharField(max_length=10, choices=UserType.choices, default=UserType.JOBSEEKER)
+ 
+    user_type = models.CharField(max_length=10, choices=UserType.choices)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=15, blank=True, null=True)
-
+ 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'user_type']
-
+ 
     is_online = models.BooleanField(default=False)
     last_seen = models.DateTimeField(auto_now=True)
-
+ 
     def __str__(self):
         return f"{self.username} ({self.user_type})"
-
-
-
+ 
+ 
+ 
 #PROFILES
-
-
+ 
+ 
 class JobSeekerProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='jobseeker_profile')
-
+ 
     # Basic Profile
     full_name = models.CharField(max_length=200, blank=True)
     gender = models.CharField(
@@ -47,7 +47,7 @@ class JobSeekerProfile(models.Model):
     )
     nationality = models.CharField(max_length=100, blank=True)
     profile_photo = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
-
+ 
     # Current / Professional Details (general fields only)
     current_job_title = models.CharField(max_length=200, blank=True)
     current_company = models.CharField(max_length=200, blank=True)
@@ -63,8 +63,8 @@ class JobSeekerProfile(models.Model):
         blank=True
     )
     current_location = models.CharField(max_length=200, blank=True)
-    preferred_locations = models.TextField(blank=True)  # comma separated 
-
+    preferred_locations = models.TextField(blank=True)  # comma separated
+ 
     # Contact Details
     alternate_phone = models.CharField(max_length=15, blank=True, null=True)
     alternate_email = models.EmailField(blank=True, null=True)
@@ -74,14 +74,36 @@ class JobSeekerProfile(models.Model):
     state = models.CharField(max_length=100, blank=True)
     pincode = models.CharField(max_length=10, blank=True)
     country = models.CharField(max_length=100, blank=True)
-
+ 
     # Resume & Portfolio
     resume_file = models.FileField(upload_to='resumes/', null=True, blank=True)
     portfolio_link = models.URLField(blank=True, null=True)
-
-    # Career Preferences
-    current_ctc = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    expected_ctc = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+ 
+    # Career Preferences (FIXED DECIMALS)
+    total_experience_years = models.DecimalField(
+        max_digits=4,
+        decimal_places=1,
+        null=True,
+        blank=True,
+        default=None
+    )
+ 
+    current_ctc = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        default=None
+    )
+ 
+    expected_ctc = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        default=None
+    )
+ 
     preferred_job_type = models.CharField(
         max_length=50,
         choices=(
@@ -95,34 +117,34 @@ class JobSeekerProfile(models.Model):
     preferred_role_industry = models.CharField(max_length=200, blank=True)
     ready_to_start_immediately = models.BooleanField(default=False)
     willing_to_relocate = models.BooleanField(default=False)
-
+ 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+ 
     def __str__(self):
         return f"Job Seeker: {self.user.email}"
-
-
-
-
-
+ 
+ 
+ 
+ 
+ 
 class AdminProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='admin_profile')
-
+ 
     department = models.CharField(max_length=100, blank=True)
     bio = models.TextField(blank=True)
     access_level = models.CharField(max_length=50, default='Full')
-
+ 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+ 
     def __str__(self):
         return f"Admin: {self.user.email}"
-
-
+ 
+ 
 #JOB SEEKER RELATED DETAIL MODELS
-
-
+ 
+ 
 class EducationEntry(models.Model):
     class QualificationLevel(models.TextChoices):
         SSLC = 'SSLC', 'SSLC'
@@ -131,25 +153,25 @@ class EducationEntry(models.Model):
         GRADUATION = 'Graduation', 'Graduation'
         POST_GRADUATION = 'Post-Graduation', 'Post-Graduation'
         DOCTORATE = 'Doctorate', 'Doctorate'
-
+ 
     class Post10thStudy(models.TextChoices):
         INTERMEDIATE = 'Intermediate', 'Intermediate/12th'
         DIPLOMA = 'Diploma', 'Diploma'
-
+ 
     profile = models.ForeignKey(JobSeekerProfile, on_delete=models.CASCADE, related_name='educations')
-
+ 
     qualification_level = models.CharField(
         max_length=30,
         choices=QualificationLevel.choices
     )
-
+ 
     # Common fields
     institution = models.CharField(max_length=200)
     percentage_or_cgpa = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-
+ 
     # SSLC / HSC
     location = models.CharField(max_length=200, blank=True)
-
+ 
     # HSC specific
     post_10th_study = models.CharField(
         max_length=20,
@@ -157,7 +179,7 @@ class EducationEntry(models.Model):
         blank=True,
         null=True
     )
-
+ 
     # Graduation / Post-Grad / Doctorate specific
     degree = models.CharField(max_length=200, blank=True, null=True)
     department = models.CharField(max_length=200, blank=True, null=True)
@@ -170,42 +192,42 @@ class EducationEntry(models.Model):
     city = models.CharField(max_length=100, blank=True, null=True)
     state = models.CharField(max_length=100, blank=True, null=True)
     country = models.CharField(max_length=100, blank=True, null=True)
-
+ 
     # Date fields - different depending on level
     completion_year = models.DateField(
         null=True,
         blank=True,
         help_text="Used for SSLC, HSC, Diploma - year of completion"
     )
-
+ 
     start_year = models.DateField(
         null=True,
         blank=True,
         help_text="Used for Graduation, Post-Graduation, Doctorate"
     )
-
+ 
     end_year = models.DateField(
         null=True,
         blank=True,
         help_text="Used for Graduation, Post-Graduation, Doctorate"
     )
-
+ 
     class Meta:
         ordering = ['-end_year', '-completion_year', '-start_year']
-
+ 
     def __str__(self):
         return f"{self.qualification_level} - {self.institution}"
-
-
+ 
+ 
 class WorkExperienceEntry(models.Model):
     class CurrentStatus(models.TextChoices):
         FRESHER = 'Fresher', 'Fresher'
         EXPERIENCED = 'Experienced', 'Experienced'
-
+ 
     class YesNo(models.TextChoices):
         YES = 'Yes', 'Yes'
         NO = 'No', 'No'
-
+ 
     class IndustryDomain(models.TextChoices):
         IT_SOFTWARE = 'IT-Software', 'IT-Software'
         FINANCE = 'Finance', 'Finance'
@@ -215,16 +237,16 @@ class WorkExperienceEntry(models.Model):
         MARKETING = 'Marketing', 'Marketing'
         RETAIL = 'Retail', 'Retail'
         OTHER = 'Other', 'Other'
-
+ 
     class JobType(models.TextChoices):
         FULL_TIME = 'Full-time', 'Full-time'
         PART_TIME = 'Part-time', 'Part-time'
         CONTRACT = 'Contract', 'Contract'
         INTERNSHIP = 'Internship', 'Internship'
-
+ 
     profile = models.ForeignKey(JobSeekerProfile, on_delete=models.CASCADE, related_name='experiences')
-
-    # Status & internship 
+ 
+    # Status & internship
     current_status = models.CharField(
         max_length=20,
         choices=CurrentStatus.choices,
@@ -236,7 +258,7 @@ class WorkExperienceEntry(models.Model):
         blank=True,
         help_text="Only relevant if current_status is Fresher"
     )
-
+ 
     # Experience details
     job_title = models.CharField(max_length=200, blank=True)
     company_name = models.CharField(max_length=200, blank=True)
@@ -247,27 +269,27 @@ class WorkExperienceEntry(models.Model):
     job_type = models.CharField(max_length=50, choices=JobType.choices, blank=True)
     location = models.CharField(max_length=200, blank=True)
     key_responsibilities = models.TextField(blank=True)
-
+ 
     class Meta:
         ordering = ['-start_date']
-
+ 
     def __str__(self):
         if self.current_status == self.CurrentStatus.FRESHER:
             return f"Fresher (Internship: {self.has_internship_experience})"
         return f"{self.job_title} @ {self.company_name}"
-
-
+ 
+ 
 class Skill(models.Model):
     profile = models.ForeignKey(JobSeekerProfile, on_delete=models.CASCADE, related_name='skills')
     name = models.CharField(max_length=100)
-
+ 
     class Meta:
         unique_together = ['profile', 'name']
-
+ 
     def __str__(self):
         return self.name
-
-
+ 
+ 
 class LanguageKnown(models.Model):
     profile = models.ForeignKey(JobSeekerProfile, on_delete=models.CASCADE, related_name='languages')
     name = models.CharField(max_length=100)
@@ -280,26 +302,26 @@ class LanguageKnown(models.Model):
             ('Native', 'Native'),
         )
     )
-
+ 
     class Meta:
         unique_together = ['profile', 'name']
-
+ 
     def __str__(self):
         return f"{self.name} ({self.proficiency})"
-
-
+ 
+ 
 class Certification(models.Model):
     profile = models.ForeignKey(JobSeekerProfile, on_delete=models.CASCADE, related_name='certifications')
     name = models.CharField(max_length=200)
     certificate_file = models.FileField(upload_to='certificates/', null=True, blank=True)
-
+ 
     def __str__(self):
         return self.name
-
-
+ 
+ 
 #JOBS & APPLICATIONS
-
-
+ 
+ 
 class Company(models.Model):
     custom_id = models.CharField(
         max_length=20,
@@ -320,10 +342,10 @@ class Company(models.Model):
     founded_year = models.PositiveIntegerField(null=True, blank=True)
     company_address = models.TextField(blank=True)
     is_active = models.BooleanField(default=True, help_text="Admin can disable company")
-
+ 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+ 
     def save(self, *args, **kwargs):
         if not self.custom_id:
             # Auto-generate custom ID (CMP-001, CMP-002, ...)
@@ -331,18 +353,18 @@ class Company(models.Model):
             next_num = 1 if not last or not last.custom_id else int(last.custom_id.split('-')[-1]) + 1
             self.custom_id = f"CMP-{next_num:03d}"
         super().save(*args, **kwargs)
-
+ 
     def __str__(self):
         return f"{self.name} ({self.custom_id})"
-
-
-# EmployerProfile 
+ 
+ 
+# EmployerProfile
 class EmployerProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employer_profile')
-
+ 
     full_name = models.CharField(max_length=200, blank=True)           # ← personal name
     employee_id = models.CharField(max_length=50, blank=True, unique=True,   null=True,)  # ← optional staff ID
-
+ 
     company = models.ForeignKey(
         'Company',
         on_delete=models.SET_NULL,
@@ -350,22 +372,22 @@ class EmployerProfile(models.Model):
         blank=True,
         related_name='employers'
     )
-
+ 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+ 
     def __str__(self):
         company_str = self.company.name if self.company else "No Company"
         return f"Employer: {self.full_name or self.user.email} - {company_str}"
-
-
+ 
+ 
 class Job(models.Model):
     class JobType(models.TextChoices):
         FULL_TIME = 'Full-time', 'Full-time'
         PART_TIME = 'Part-time', 'Part-time'
         INTERNSHIP = 'Internship', 'Internship'
         CONTRACT = 'Contract', 'Contract'
-
+ 
     class IndustryType(models.TextChoices):
         IT_SOFTWARE = 'IT-Software', 'IT-Software'
         FINANCE = 'Finance', 'Finance'
@@ -375,26 +397,36 @@ class Job(models.Model):
         MARKETING = 'Marketing', 'Marketing'
         RETAIL = 'Retail', 'Retail'
         OTHER = 'Other', 'Other'
-
+ 
+    class JobStatus(models.TextChoices):
+        DRAFT = 'Draft', 'Draft'
+        OPEN = 'Open', 'Open'
+        HIRING_IN_PROGRESS = 'Hiring in Progress', 'Hiring in Progress'
+        ON_HOLD = 'On Hold', 'On Hold'
+        FILLED = 'Filled', 'Filled'
+        CLOSED = 'Closed', 'Closed'
+ 
+ 
     class ExperienceRequired(models.TextChoices):
         FRESHER = 'Fresher', 'Fresher'
         ZERO_TO_ONE = '0-1 Years', '0-1 Years'
         ONE_TO_THREE = '1-3 Years', '1-3 Years'
         THREE_TO_FIVE = '3-5 Years', '3-5 Years'
         FIVE_PLUS = '5+ Years', '5+ Years'
-
+ 
     class WorkType(models.TextChoices):
         ON_SITE = 'On-site', 'On-site'
         REMOTE = 'Remote', 'Remote'
         HYBRID = 'Hybrid', 'Hybrid'
-
+ 
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='jobs')
     logo = models.ImageField(upload_to='jobs_logos/', null=True, blank=True)
     title = models.CharField(max_length=255)
     location = models.CharField(max_length=255)
+    job_status = models.CharField(max_length=30,choices=JobStatus.choices,default=JobStatus.DRAFT)
     job_type = models.CharField(max_length=20, choices=JobType.choices, blank=True)
     industry_type = models.CharField(max_length=20, choices=IndustryType.choices, blank=True)
-    experience_required = models.CharField(max_length=20, choices=ExperienceRequired.choices, blank=True)
+    experience_required = models.CharField(max_length=100,blank=True,null=True)    
     work_type = models.CharField(max_length=20, choices=WorkType.choices, blank=True)
     salary = models.CharField(max_length=100, blank=True)
     description = models.TextField()
@@ -411,10 +443,10 @@ class Job(models.Model):
     posted_date = models.DateTimeField(default=timezone.now)
     posted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='posted_jobs')
     is_active = models.BooleanField(default=True, help_text="Whether this job is currently active and visible")
-
+ 
     def __str__(self):
         return f"{self.title} - {self.company.name}"
-
+ 
 class JobApplication(models.Model):
     class Status(models.TextChoices):
         APPLIED = 'applied', 'Applied'
@@ -426,85 +458,85 @@ class JobApplication(models.Model):
         REJECTED = 'rejected', 'Rejected'
         HIRED = 'hired', 'Hired'
         WITHDRAWN = 'withdrawn', 'Withdrawn'
-
+ 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='applications')
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='applications')
     applied_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.APPLIED)
     cover_letter = models.TextField(blank=True, null=True)
     resume_version = models.FileField(upload_to='application_resumes/', null=True, blank=True)
-
+ 
     class Meta:
         indexes = [
             models.Index(fields=['user', 'job']),
         ]
-
+ 
     def __str__(self):
         return f"{self.user.email} → {self.job.title}"
-
-
+ 
+ 
 class SavedJob(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_jobs')
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='saved_by')
     saved_date = models.DateTimeField(auto_now_add=True)
-
+ 
     class Meta:
         unique_together = ['user', 'job']
-
+ 
     def __str__(self):
         return f"{self.user.email} saved {self.job.title}"
-
-
-
+ 
+ 
+ 
 #OTHER MODELS
-
-
+ 
+ 
 class NewsletterSubscriber(models.Model):
     email = models.EmailField(unique=True)
     subscribed_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
-
+ 
     def __str__(self):
         return self.email
-
-
+ 
+ 
 class Notification(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
-
+ 
     class Meta:
         ordering = ['-created_at']
-
+ 
     def __str__(self):
         return f"{self.user.email} - {self.message[:40]}"
-    
-# Chat 
-
+   
+# Chat
+ 
 from django.conf import settings
-
+ 
 class Conversation(models.Model):
-    
+   
     participants = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='job_conversations')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)    
     initiated_by = models.ForeignKey(settings.AUTH_USER_MODEL,related_name='initiated_conversations',on_delete=models.SET_NULL,null=True,blank=True)
     jobseeker_can_reply = models.BooleanField(default=False)
-    
+   
     class Meta:
         ordering = ['-updated_at']
-    
+   
     def __str__(self):
         return f"Conversation {self.id} ({self.participants.count()} participants)"
-    
+   
     def allow_jobseeker_to_reply(self):
        
         self.jobseeker_can_reply = True
         self.save()
-
+ 
 class Message(models.Model):
-    
+   
     conversation = models.ForeignKey(Conversation, related_name='messages', on_delete=models.CASCADE)
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='sent_job_messages', on_delete=models.CASCADE)
     receiver = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='received_job_messages', on_delete=models.CASCADE)
@@ -512,12 +544,12 @@ class Message(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
     is_first_message = models.BooleanField(default=False)
-    
+   
     class Meta:
         ordering = ['timestamp']
-    
+   
     def save(self, *args, **kwargs):
-        
+       
         if not self.conversation.messages.exists():
             self.is_first_message = True
            
@@ -526,8 +558,8 @@ class Message(models.Model):
                 self.conversation.initiated_by = self.sender
                 self.conversation.save()
         super().save(*args, **kwargs)    
-
-
+ 
+ 
 from django.db import models
  
  
@@ -546,8 +578,30 @@ class ChatMessage(models.Model):
  
     def __str__(self):
         return f"{self.sender}: {self.message[:30]}"
-    
+   
 from django.db import models
+ 
+ 
+class UserSettings(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="settings"
+    )
+ 
+    account_type = models.CharField(max_length=50, default="Job Seeker")
+    phone = models.CharField(max_length=20, blank=True)
+ 
+    show_online_status = models.BooleanField(default=True)
+    show_read_receipts = models.BooleanField(default=True)
+    restrict_duplicate_applications = models.BooleanField(default=False)
+    hide_cv = models.BooleanField(default=False)
+ 
+    updated_at = models.DateTimeField(auto_now=True)
+ 
+    def __str__(self):
+        return f"{self.user.email} settings"
+ 
  
 class HelpTopic(models.Model):
     title = models.CharField(max_length=200)
@@ -594,7 +648,7 @@ class RaiseTicket(models.Model):
     def __str__(self):
         return f"{self.name} - {self.subject}"
  
-
+ 
 # Password
  
 class PasswordResetToken(models.Model):
@@ -614,8 +668,7 @@ class PasswordResetToken(models.Model):
         if not self.expires_at:
             self.expires_at = timezone.now() + timedelta(hours=24)
         super().save(*args, **kwargs)
-
-
+ 
 class ContactMessage(models.Model):
     name = models.CharField(max_length=150)
     email = models.EmailField()
@@ -624,4 +677,6 @@ class ContactMessage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
  
     def __str__(self):
-        return f"{self.name} - {self.email}"
+        return f"{self.name} - {self. Email}"        
+ 
+ 

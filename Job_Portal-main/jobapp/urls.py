@@ -1,13 +1,18 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
-    ContactMessageCreateAPIView,
     JobSeekerRegistrationView,
     EmployerRegistrationView,
     LoginView,
     LogoutView,
     JobSeekerProfileView,
     EmployerProfileView,
+    MarkNotificationUnreadView,
+    DeleteNotificationView,
+    ClearAllNotificationsView,
+    UserSettingsView,
+    SaveJobView,
+    JobApplicationDetailView,
     ConversationListView,
     ConversationDetailView,
     ConversationMessagesView,
@@ -23,8 +28,12 @@ from .views import (
     ResetPasswordConfirmView,
     CreatePasswordView,
     ValidateResetTokenView,
-    AdminCreatePasswordTokenView, 
-    RaiseTicketCreateView
+    AdminCreatePasswordTokenView,
+    help_topics,
+    RaiseTicketCreateView,
+    ContactMessageCreateAPIView,
+    
+
 )
 from . import views 
  
@@ -75,7 +84,16 @@ urlpatterns = [
     # Notifications
     path('notifications/', views.NotificationListView.as_view(), name='notification-list'),
     path('notifications/<int:pk>/read/', views.MarkNotificationReadView.as_view(), name='mark-notification-read'),
-
+ 
+    path('notifications/<int:pk>/unread/', MarkNotificationUnreadView.as_view()),
+    path('notifications/<int:pk>/delete/', DeleteNotificationView.as_view()),
+    path('notifications/clear-all/', ClearAllNotificationsView.as_view()),
+   
+    path("settings/", UserSettingsView.as_view(), name="user-settings"),
+    path("jobs/save/", SaveJobView.as_view(), name="save-job"),
+    path("jobs/save/<int:job_id>/", SaveJobView.as_view(), name="remove-saved-job"),
+    path("jobs/applications/<int:pk>/", JobApplicationDetailView.as_view()),
+ 
     # Conversations
     path('chat/conversations/', ConversationListView.as_view(), name='chat-conversations'),
     path('chat/conversations/<int:pk>/', ConversationDetailView.as_view(), name='chat-conversation-detail'),

@@ -7,16 +7,24 @@ def generate_token():
     return secrets.token_urlsafe(32)
  
 def send_password_reset_email(user, token, request):
-    """Send password reset email with token separate from URL"""
+    """Send password reset email with different links based on user type"""
    
     frontend_url = settings.FRONTEND_URL
-    reset_page = f"{frontend_url}/Job-portal/jobseeker/login/forgotpassword/createpassword"
    
-    subject = 'Password Reset Request'
+   
+    if user.user_type == 'employer':
+        reset_page = f"{frontend_url}/Job-portal/employer/login/forgotpassword/createpassword"
+    elif user.user_type == 'jobseeker':
+        reset_page = f"{frontend_url}/Job-portal/jobseeker/login/forgotpassword/createpassword"
+    else:
+       
+        reset_page = f"{frontend_url}/Job-portal/login/forgotpassword/createpassword"
+   
+    subject = f'Password Reset Request - {user.get_user_type_display()} Account'
     message = f"""
 Hello {user.username},
  
-We received a request to reset your password for {user.email}.
+We received a request to reset your password for your {user.get_user_type_display()} account: {user.email}
  
 Please visit this link:
 {reset_page}
@@ -36,4 +44,5 @@ If you didn't request this, please ignore this email.
         [user.email],
         fail_silently=False,
     )
+   
  
