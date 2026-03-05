@@ -10,6 +10,7 @@ from .views import (
     MarkNotificationUnreadView,
     DeleteNotificationView,
     ClearAllNotificationsView,
+    NewsletterSubscribeAPIView,
     UserSettingsView,
     SaveJobView,
     JobApplicationDetailView,
@@ -112,8 +113,11 @@ urlpatterns = [
     path('auth/create-password/', CreatePasswordView.as_view(), name='create-password'),
     path('auth/validate-reset-token/', ValidateResetTokenView.as_view(), name='validate-reset-token'),
     path('admin/create-password-token/', AdminCreatePasswordTokenView.as_view(), name='admin-create-password-token'),
-     
+    # raise ticket
     path('raise-ticket/', RaiseTicketCreateView.as_view(), name='raise-ticket'),
+    # contact 
     path('contact/', ContactMessageCreateAPIView.as_view(), name='contact-message'),
+    # ----newsletter subscribe--------------------------------
+    path("subscribe/", NewsletterSubscribeAPIView.as_view(), name="subscribe-newsletter"),
 
 ]
