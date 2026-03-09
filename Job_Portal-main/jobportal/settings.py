@@ -25,7 +25,11 @@ SECRET_KEY = 'django-insecure-fzjvgpngr%%8@-@^oat@(g(6+4i@jq+u(@2=&j@vyl3!n3wa*5
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "54.183.89.14"
+    ]
 
 
 
@@ -40,6 +44,7 @@ INSTALLED_APPS = [
     # 'django_extensions',
     'rest_framework',
     'corsheaders',
+    'rest_framework_simplejwt.token_blacklist',
     # 'jobapp',
     'jobapp.apps.JobappConfig',
     'channels',
@@ -68,7 +73,7 @@ MIDDLEWARE = [
     
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -77,6 +82,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:5173", 
     "https://112m0g3c-5173.inc1.devtunnels.ms",
+    "http://54.183.89.14"
     
 ]
 
