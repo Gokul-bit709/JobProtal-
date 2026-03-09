@@ -345,6 +345,7 @@ class Company(models.Model):
  
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_verified = models.BooleanField(default=False)
  
     def save(self, *args, **kwargs):
         if not self.custom_id:
@@ -679,4 +680,105 @@ class ContactMessage(models.Model):
     def __str__(self):
         return f"{self.name} - {self. Email}"        
  
+   
+
+# CompanyVerify
+ 
+class CompanyVerification(models.Model):
+ 
+    STATUS_CHOICES = (
+
+        ('pending', 'Pending'),
+
+        ('approved', 'Approved'),
+
+        ('rejected', 'Rejected'),
+
+    )
+ 
+    employer = models.OneToOneField(
+
+        settings.AUTH_USER_MODEL,
+
+        on_delete=models.CASCADE,
+
+        related_name="company_verification"
+
+    )
+ 
+    legal_name = models.CharField(max_length=255)
+
+    registration_number = models.CharField(max_length=255, unique=True)
+
+    tax_id = models.CharField(max_length=255, unique=True)
+
+    website_url = models.URLField()
+
+    official_email = models.EmailField()
+
+    phone_number = models.CharField(max_length=20)
+ 
+    incorporation_certificate = models.FileField(
+
+        upload_to="company_certificates/"
+
+    )
+ 
+    status = models.CharField(
+
+        max_length=10,
+
+        choices=STATUS_CHOICES,
+
+        default="pending",
+
+        db_index=True
+
+    )
+ 
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    class Meta:
+
+        ordering = ['-created_at']
+ 
+    def save(self, *args, **kwargs):
+ 
+        is_new = self.pk is None
+ 
+        previous_status = None
+
+        if not is_new:
+
+            previous_status = CompanyVerification.objects.get(pk=self.pk).status
+ 
+        super().save(*args, **kwargs)
+ 
+        
+
+        if self.status == "approved" and previous_status != "approved":
+ 
+            employer_profile = self.employer.employer_profile
+ 
+            company, created = Company.objects.get_or_create(
+
+                name=self.legal_name,
+
+                website=self.website_url
+
+            )
+ 
+            company.is_verified = True
+
+            company.save()
+ 
+            if not employer_profile.company:
+
+                employer_profile.company = company
+
+                employer_profile.save()
+ 
+    def __str__(self):
+
+        return self.legal_name
  

@@ -7,7 +7,7 @@ from .models import (
     User, JobSeekerProfile, EmployerProfile, AdminProfile,
     EducationEntry, WorkExperienceEntry, Skill, LanguageKnown, Certification,
     Company, Job, JobApplication, SavedJob,
-    NewsletterSubscriber, Notification, Conversation, Message,ContactMessage
+    NewsletterSubscriber, Notification, Conversation, Message,ContactMessage,CompanyVerification
 )
  
 User = get_user_model()
@@ -390,7 +390,8 @@ class CompanySerializer(serializers.ModelSerializer):
             'slogan', 'rating', 'review_count',
             'company_overview', 'website', 'industry',
             'employee_count', 'founded_year', 'company_address',
-            'is_active'
+            'is_active','is_verified'
+
         ]
         read_only_fields = ['id', 'custom_id', 'rating', 'review_count', 'is_active']
  
@@ -453,6 +454,76 @@ class JobReadSerializer(serializers.ModelSerializer):
  
 # Job Serializer for CREATE (full validation)
 class JobWriteSerializer(serializers.ModelSerializer):
+    company = CompanySerializer(read_only=True)
+    posted_by = serializers.CharField(source='posted_by.username', read_only=True)
+ 
+    class Meta:
+        model = Job
+        fields = [
+            'id', 'title', 'company', 'location',
+            'job_type', 'industry_type', 'experience_required', 'work_type',
+            'salary', 'description', 'responsibilities','job_highlights','key_skills',
+            'education_required', 'tags', 'department', 'shift', 'duration',
+            'openings', 'applicants_count', 'posted_date', 'posted_by',
+            'is_active'
+        ]
+        read_only_fields = ['id', 'company', 'posted_date', 'posted_by', 'applicants_count']
+ 
+    def validate(self, data):
+ 
+        user = self.context['request'].user
+ 
+       
+        if not hasattr(user, 'employer_profile'):
+            raise serializers.ValidationError(
+                "Only employers can create/update jobs."
+            )
+ 
+        employer_profile = user.employer_profile
+ 
+       
+        if not employer_profile.company:
+            raise serializers.ValidationError(
+                "You must create or link a company in your profile before posting jobs."
+            )
+ 
+       
+        try:
+            verification = CompanyVerification.objects.get(employer=user)
+        except CompanyVerification.DoesNotExist:
+            raise serializers.ValidationError(
+                "Please verify your company first before posting jobs."
+            )
+ 
+        if verification.status != "approved":
+            raise serializers.ValidationError(
+                "Your company verification is not approved by admin yet."
+            )
+ 
+       
+        title = data.get('title')
+ 
+        if title and Job.objects.filter(
+            company=employer_profile.company,
+            title__iexact=title
+        ).exists():
+ 
+            raise serializers.ValidationError({
+                "title": f"A job with title '{title}' already exists for this company."
+            })
+ 
+        return data
+ 
+    def create(self, validated_data):
+ 
+        user = self.context['request'].user
+        employer_profile = user.employer_profile
+ 
+        validated_data['posted_by'] = user
+        validated_data['company'] = employer_profile.company
+ 
+        return super().create(validated_data)
+ 
     company = CompanySerializer(read_only=True)
     posted_by = serializers.CharField(source='posted_by.username', read_only=True)
  
@@ -873,5 +944,38 @@ class ContactMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContactMessage
         fields = '__all__'    
+
+
+# CompanyVerify Serializer  
+ 
+class CompanyVerificationSerializer(serializers.ModelSerializer):
+ 
+    class Meta:
+        model = CompanyVerification
+        fields = "__all__"
+        read_only_fields = ['status', 'employer', 'created_at']
+ 
+    def validate(self, data):
+ 
+        registration_number = data.get("registration_number")
+        tax_id = data.get("tax_id")
+ 
+        if CompanyVerification.objects.filter(
+            registration_number=registration_number
+        ).exists():
+            raise serializers.ValidationError(
+                "This company registration number is already submitted for verification."
+            )
+ 
+        if CompanyVerification.objects.filter(
+            tax_id=tax_id
+        ).exists():
+            raise serializers.ValidationError(
+                "This GST/Tax ID is already used by another company."
+            )
+ 
+        return data
+         
+ 
  
  

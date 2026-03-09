@@ -1239,4 +1239,70 @@ class NewsletterSubscribeAPIView(APIView):
             )
  
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# Company Verify
+ 
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from .models import CompanyVerification
+from .serializers import CompanyVerificationSerializer
+ 
+ 
+class SubmitCompanyVerification(APIView):
+ 
+    permission_classes = [IsAuthenticated]
+ 
+    def post(self, request):
+ 
+        if request.user.user_type != "employer":
+            return Response(
+                {"error": "Only employers can submit company verification"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+ 
+        if CompanyVerification.objects.filter(employer=request.user).exists():
+            return Response({
+                "error": "You already submitted verification"
+            })
+ 
+        serializer = CompanyVerificationSerializer(data=request.data)
+ 
+        if serializer.is_valid():
+            serializer.save(employer=request.user)
+ 
+            return Response({
+                "message": "Verification submitted successfully",
+                "status": "pending"
+            })
+ 
+        return Response(serializer.errors)
+   
+from rest_framework.permissions import IsAdminUser
+ 
+ 
+class CompanyVerificationAction(APIView):
+ 
+    permission_classes = [IsAdminUser]
+ 
+    def patch(self, request, pk):
+ 
+        try:
+            verification = CompanyVerification.objects.get(id=pk)
+        except CompanyVerification.DoesNotExist:
+            return Response({"error": "Verification not found"}, status=404)
+ 
+        status_value = request.data.get("status")
+ 
+        if status_value not in ["approved", "rejected"]:
+            return Response({"error": "Invalid status"})
+ 
+        verification.status = status_value
+        verification.save()
+ 
+        return Response({
+            "message": f"Company {status_value} successfully"
+        })    
  
