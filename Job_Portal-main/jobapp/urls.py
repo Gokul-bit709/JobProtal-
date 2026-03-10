@@ -34,6 +34,12 @@ from .views import (
     ContactMessageCreateAPIView,
     SubmitCompanyVerification,
     CompanyVerificationAction,
+    CreateJobPreviewView,
+    PreviewJobView,
+    PublishJobView,
+    UpdateJobView,
+    DeleteJobView,
+    JobListView,
     
 
 )
@@ -123,5 +129,13 @@ urlpatterns = [
     # Company Verify 
     path("company/verify/",SubmitCompanyVerification.as_view()),
     path("admin/company-verification/<int:pk>/",CompanyVerificationAction.as_view()),
+    # Post a Job
+    path('job/create/', CreateJobPreviewView.as_view()),
+    path('job/preview/<int:pk>/', PreviewJobView.as_view()),
+    path('job/publish/<int:pk>/', PublishJobView.as_view()),
+    path('job/update/<int:pk>/', UpdateJobView.as_view()),
+    path('job/delete/<int:pk>/', DeleteJobView.as_view()),
+    path('job/list/', JobListView.as_view())
+ 
 
 ]

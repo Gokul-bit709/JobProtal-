@@ -781,4 +781,60 @@ class CompanyVerification(models.Model):
     def __str__(self):
 
         return self.legal_name
+
+
+
+# Post a Job
+ 
+from django.db import models
+from django.contrib.auth import get_user_model
+ 
+User = get_user_model()
+ 
+class PostAJob(models.Model):
+ 
+    class WorkType(models.TextChoices):
+        FULL_TIME = "Full Time", "Full Time"
+        PART_TIME = "Part Time", "Part Time"
+        INTERNSHIP = "Internship", "Internship"
+        CONTRACT = "Contract", "Contract"
+ 
+    class Shift(models.TextChoices):
+        DAY = "Day", "Day"
+        NIGHT = "Night", "Night"
+        ROTATIONAL = "Rotational", "Rotational"
+ 
+    employer = models.ForeignKey(User, on_delete=models.CASCADE)
+ 
+    job_title = models.CharField(max_length=255)
+    industry_type = models.CharField(max_length=255)
+    department = models.CharField(max_length=255)
+ 
+    work_type = models.CharField(max_length=50, choices=WorkType.choices)
+    shift = models.CharField(max_length=50, choices=Shift.choices)
+ 
+    work_duration = models.CharField(max_length=100)
+    salary = models.DecimalField(max_digits=10, decimal_places=2)
+ 
+    experience = models.CharField(max_length=100)
+    location = models.CharField(max_length=255)
+ 
+    openings = models.PositiveIntegerField()
+ 
+    job_category = models.CharField(max_length=255)
+    education = models.CharField(max_length=255)
+ 
+    key_skills = models.TextField()
+    job_highlights = models.TextField()
+ 
+    job_description = models.TextField()
+    responsibilities = models.TextField()
+ 
+    is_published = models.BooleanField(default=False, db_index=True)  
+ 
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+ 
+    def __str__(self):
+        return self.job_title
+ 
  

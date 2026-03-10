@@ -20,6 +20,7 @@ from .models import (
     RaiseTicket,
     ContactMessage,
     CompanyVerification,
+    PostAJob
     
 )
 
@@ -231,3 +232,13 @@ class CompanyVerificationAdmin(admin.ModelAdmin):
  
     list_display = ("legal_name","official_email","phone_number","status","created_at")
     list_filter = ("status",)
+
+@admin.register(PostAJob)
+class PostAJobAdmin(admin.ModelAdmin):
+    list_display = (
+        'job_title',
+        'location',
+        'salary',
+        'created_at'
+    )
+ 

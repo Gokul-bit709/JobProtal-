@@ -1306,3 +1306,115 @@ class CompanyVerificationAction(APIView):
             "message": f"Company {status_value} successfully"
         })    
  
+
+
+ 
+# Post a Job
+ 
+from rest_framework import generics, permissions
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from .models import PostAJob
+from .serializers import PostAJobSerializer
+ 
+from .models import CompanyVerification
+ 
+# Create Job (Preview Mode)
+from .models import CompanyVerification
+from rest_framework.exceptions import PermissionDenied
+ 
+class CreateJobPreviewView(generics.CreateAPIView):
+ 
+    serializer_class = PostAJobSerializer
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def perform_create(self, serializer):
+ 
+        user = self.request.user
+ 
+        # 1 Check user type
+        if user.user_type != "employer":
+            raise PermissionDenied("Only employers can post jobs")
+ 
+        # 2 Check employer profile
+        if not hasattr(user, "employer_profile"):
+            raise PermissionDenied("Employer profile not found")
+ 
+        employer_profile = user.employer_profile
+ 
+        # 3 Check company
+        if not employer_profile.company:
+            raise PermissionDenied("You must link a company first")
+ 
+        # 4 Check company verification
+        verification = CompanyVerification.objects.filter(
+            employer=user,
+            status="approved"
+        ).exists()
+ 
+        if not verification:
+            raise PermissionDenied("Company must be verified before posting jobs")
+ 
+        serializer.save(
+            employer=user,
+            is_published=False
+        )
+ 
+# Preview Job
+class PreviewJobView(generics.RetrieveAPIView):
+    serializer_class = PostAJobSerializer
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def get_queryset(self):
+        return PostAJob.objects.filter(employer=self.request.user)
+ 
+# Publish Job (Submit Job)
+from django.shortcuts import get_object_or_404
+ 
+class PublishJobView(APIView):
+ 
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def patch(self, request, pk):
+ 
+        if request.user.user_type != "employer":
+            raise PermissionDenied("Only employers can publish jobs")
+ 
+        job = get_object_or_404(
+            PostAJob,
+            id=pk,
+            employer=request.user
+        )
+ 
+        job.is_published = True
+        job.save()
+ 
+        return Response({
+            "message": "Job posted successfully"
+        })
+ 
+# Edit Job
+class UpdateJobView(generics.UpdateAPIView):
+ 
+    serializer_class = PostAJobSerializer
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def get_queryset(self):
+        return PostAJob.objects.filter(employer=self.request.user)
+ 
+# Delete Job
+class DeleteJobView(generics.DestroyAPIView):
+ 
+    serializer_class = PostAJobSerializer
+    permission_classes = [permissions.IsAuthenticated]
+ 
+    def get_queryset(self):
+        return PostAJob.objects.filter(employer=self.request.user)
+ 
+# List All Posted Jobs
+class PostedJobListView(generics.ListAPIView):
+    queryset = PostAJob.objects.filter(is_published=True)
+    serializer_class = PostAJobSerializer
+ 
+ 
+ 
