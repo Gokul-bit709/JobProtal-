@@ -241,4 +241,43 @@ class PostAJobAdmin(admin.ModelAdmin):
         'salary',
         'created_at'
     )
- 
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+@admin.register(User)
+class UserAdmin(admin.ModelAdmin):
+    list_display = ('id', 'username', 'email', 'user_type', 'is_active', 'date_joined')
+    list_filter = ('user_type', 'is_active')
+    search_fields = ('username', 'email')
+    readonly_fields = ('date_joined', 'last_login')
+    fieldsets = (
+        (None, {'fields': ('username', 'password')}),
+        ('Personal info', {'fields': ('first_name', 'last_name', 'email', 'phone', 'user_type')}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Important dates', {'fields': ('last_login', 'date_joined')}),
+    )
+from .models import JobSeekerProfile  # Add this import if not already present
+
+@admin.register(JobSeekerProfile)
+class JobSeekerProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'full_name', 'current_job_title', 'current_location', 'total_experience_years')
+    search_fields = ('user__email', 'full_name', 'phone')  # phone? Actually JobSeekerProfile has no direct phone field; it has alternate_phone, and user model has phone. We can use user__phone.
+    list_filter = ('gender', 'current_location')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        (None, {'fields': ('user', 'full_name', 'profile_photo')}),
+        ('Personal Info', {'fields': ('gender', 'dob', 'marital_status', 'nationality')}),
+        ('Contact Details', {'fields': ('alternate_phone', 'alternate_email', 'full_address', 'street', 'city', 'state', 'pincode', 'country')}),
+        ('Professional Details', {'fields': ('current_job_title', 'current_company', 'total_experience_years', 'notice_period', 'current_location', 'preferred_locations')}),
+        ('Resume & Portfolio', {'fields': ('resume_file', 'portfolio_link')}),
+        ('Career Preferences', {'fields': ('current_ctc', 'expected_ctc', 'preferred_job_type', 'preferred_role_industry', 'ready_to_start_immediately', 'willing_to_relocate')}),
+        ('Meta', {'fields': ('created_at', 'updated_at')}),
+    )
+    inlines = [
+        EducationInline,
+        ExperienceInline,
+        SkillInline,
+        LanguageInline,
+        CertificationInline
+    ]

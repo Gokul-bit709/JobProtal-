@@ -58,6 +58,7 @@ urlpatterns = [
 
     # Profile (only authenticated users)
     path('profile/jobseeker/', JobSeekerProfileView.as_view(), name='jobseeker-profile'),
+    path('jobseekers/', views.JobSeekerListView.as_view(), name='jobseeker-list'),
     path('profile/employer/', EmployerProfileView.as_view(), name='employer-profile'),
 
     # Companies
