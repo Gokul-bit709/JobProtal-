@@ -66,6 +66,7 @@ class JobSeekerProfile(models.Model):
     preferred_locations = models.TextField(blank=True)  # comma separated
  
     # Contact Details
+    
     alternate_phone = models.CharField(max_length=15, blank=True, null=True)
     alternate_email = models.EmailField(blank=True, null=True)
     full_address = models.TextField(blank=True)
@@ -836,5 +837,3 @@ class PostAJob(models.Model):
  
     def __str__(self):
         return self.job_title
- 
- 
