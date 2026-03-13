@@ -24,17 +24,49 @@ from .serializers import (
 )
  
  
+
+
+ 
+from rest_framework.views import APIView
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.utils import timezone
+from datetime import timedelta
+ 
+from .serializers import JobSeekerRegistrationSerializer, EmployerRegistrationSerializer, UserReadSerializer
+from .models import EmailOTP
+from .utils import generate_otp, send_email_otp
+ 
+ 
 class JobSeekerRegistrationView(APIView):
     permission_classes = [AllowAny]
  
     def post(self, request):
         serializer = JobSeekerRegistrationSerializer(data=request.data)
+ 
         if serializer.is_valid():
             user = serializer.save()
+ 
+            # Generate OTP
+            otp = generate_otp()
+ 
+            # Save OTP
+            EmailOTP.objects.create(
+                user=user,
+                otp=otp,
+                purpose="signup",
+                expires_at=timezone.now() + timedelta(minutes=10)
+            )
+ 
+            # Send OTP to email
+            send_email_otp(user, otp, "signup")
+ 
             return Response({
-                "message": "Jobseeker registered successfully",
-                "user": UserReadSerializer(user).data  
+                "message": "OTP sent to your email. Please verify.",
+                "user": UserReadSerializer(user).data
             }, status=status.HTTP_201_CREATED)
+ 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
  
  
@@ -42,23 +74,45 @@ class EmployerRegistrationView(APIView):
     permission_classes = [AllowAny]
  
     def post(self, request):
-        print(f"Registration data received: {request.data}")  # Debug print
+        print(f"Registration data received: {request.data}")
+ 
         serializer = EmployerRegistrationSerializer(data=request.data)
+ 
         if serializer.is_valid():
             user = serializer.save()
-            print(f"User created: {user.email}, Type: {user.user_type}")  # Debug print
+ 
+            print(f"User created: {user.email}, Type: {user.user_type}")
+ 
+            # Generate OTP
+            otp = generate_otp()
+ 
+            # Save OTP
+            EmailOTP.objects.create(
+                user=user,
+                otp=otp,
+                purpose="signup",
+                expires_at=timezone.now() + timedelta(minutes=10)
+            )
+ 
+            # Send OTP
+            send_email_otp(user, otp, "signup")
+ 
             return Response({
-                "message": "Employer registered successfully",
+                "message": "OTP sent to your email. Please verify.",
                 "user": {
-                    'id': user.id,
-                    'email': user.email,
-                    'username': user.username,
-                    'user_type': user.user_type,  # Should be 'employer'
-                    'phone': user.phone
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "user_type": user.user_type,
+                    "phone": user.phone
                 }
             }, status=status.HTTP_201_CREATED)
-        print(f"Registration errors: {serializer.errors}")  # Debug print
+ 
+        print(f"Registration errors: {serializer.errors}")
+ 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+ 
+ 
  
  
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -1424,5 +1478,41 @@ class PostedJobListView(generics.ListAPIView):
     queryset = PostAJob.objects.filter(is_published=True)
     serializer_class = PostAJobSerializer
  
+ 
+
+# OTP
+ 
+class VerifyEmailOTPView(APIView):
+    permission_classes = [AllowAny]
+ 
+    def post(self, request):
+ 
+        email = request.data.get("email")
+        otp = request.data.get("otp")
+ 
+        try:
+            user = User.objects.get(email=email)
+ 
+            otp_obj = EmailOTP.objects.filter(
+                user=user,
+                otp=otp,
+                is_verified=False
+            ).last()
+ 
+            if not otp_obj or not otp_obj.is_valid():
+                return Response({"error": "Invalid or expired OTP"}, status=400)
+ 
+            otp_obj.is_verified = True
+            otp_obj.save()
+ 
+            user.is_active = True
+            user.save()
+ 
+            return Response({
+                "message": "Email verified successfully"
+            })
+ 
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=404)    
  
  

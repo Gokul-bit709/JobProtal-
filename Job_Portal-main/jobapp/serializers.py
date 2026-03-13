@@ -989,4 +989,11 @@ class PostAJobSerializer(serializers.ModelSerializer):
         model = PostAJob
         fields = "__all__"
         read_only_fields = ["employer", "is_published", "created_at"]
+
+
+# OTP Serializer
+ 
+class VerifyEmailOTPSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)
  

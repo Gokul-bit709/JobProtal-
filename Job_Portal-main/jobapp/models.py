@@ -837,3 +837,22 @@ class PostAJob(models.Model):
  
     def __str__(self):
         return self.job_title
+    
+# OTP
+ 
+class EmailOTP(models.Model):
+    PURPOSE_CHOICES = (
+        ('signup', 'Signup'),
+        ('login', 'Login'),
+    )
+ 
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    otp = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=10, choices=PURPOSE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_verified = models.BooleanField(default=False)
+ 
+    def is_valid(self):
+        return timezone.now() < self.expires_at and not self.is_verified  
+ 

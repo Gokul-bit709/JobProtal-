@@ -45,4 +45,40 @@ If you didn't request this, please ignore this email.
         fail_silently=False,
     )
    
+# OTP
+ 
+import random
+ 
+def generate_otp():
+    return str(random.randint(100000, 999999))
+ 
+from django.core.mail import send_mail
+from django.conf import settings
+ 
+def send_email_otp(user, otp, purpose="signup"):
+ 
+    subject = "Email Verification OTP"
+ 
+    message = f"""
+Hello {user.username},
+ 
+Your OTP for {purpose} verification is:
+ 
+{otp}
+ 
+This OTP will expire in 10 minutes.
+ 
+If you did not request this, please ignore this email.
+ 
+Job Portal Team
+"""
+ 
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False,
+    )    
+   
  
