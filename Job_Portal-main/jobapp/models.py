@@ -855,4 +855,50 @@ class EmailOTP(models.Model):
  
     def is_valid(self):
         return timezone.now() < self.expires_at and not self.is_verified  
+
+from django.db import models
+ 
+ 
+class AboutyourCompany(models.Model):
+ 
+    title = models.CharField(max_length=200)
+    company = models.CharField(max_length=200)
+    companyId = models.CharField(max_length=50)
+    logo = models.URLField(blank=True)
+ 
+    posted = models.DateTimeField(auto_now_add=True)
+    PostedBy = models.CharField(max_length=100)
+ 
+    IndustryType = models.CharField(max_length=200)
+    Department = models.CharField(max_length=200)
+    EducationRequired = models.CharField(max_length=200)
+ 
+    KeySkills = models.TextField()
+    JobHighlights = models.TextField()
+    Responsibilities = models.TextField()
+ 
+    WorkType = models.CharField(max_length=100)
+    Shift = models.CharField(max_length=100)
+    duration = models.CharField(max_length=100)
+ 
+    salary = models.CharField(max_length=100)
+    experience = models.CharField(max_length=100)
+    location = models.CharField(max_length=200)
+ 
+    openings = models.IntegerField()
+    applicants = models.IntegerField(default=0)
+ 
+    ratings = models.FloatField(default=0)
+    reviewNo = models.IntegerField(default=0)
+ 
+    tags = models.CharField(max_length=200)
+ 
+    companyOverview = models.TextField()
+    jobDescription = models.TextField()
+ 
+    status_text = models.CharField(max_length=100)
+    status_type = models.CharField(max_length=50)
+ 
+    def __str__(self):
+        return self.title
  

@@ -992,8 +992,18 @@ class PostAJobSerializer(serializers.ModelSerializer):
 
 
 # OTP Serializer
- 
+
 class VerifyEmailOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
+
+ 
+from .models import Job
+ 
+ 
+class AboutyourcompanySerializer(serializers.ModelSerializer):
+ 
+    class Meta:
+        model = Job
+        fields = '__all__'
  

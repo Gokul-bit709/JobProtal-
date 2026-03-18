@@ -40,7 +40,11 @@ from .views import (
     UpdateJobView,
     DeleteJobView,
     JobListView,
-    
+    job_list,
+    job_detail,
+    create_job,
+    update_job,
+    delete_job,
 
 )
 from . import views 
@@ -136,7 +140,15 @@ urlpatterns = [
     path('job/publish/<int:pk>/', PublishJobView.as_view()),
     path('job/update/<int:pk>/', UpdateJobView.as_view()),
     path('job/delete/<int:pk>/', DeleteJobView.as_view()),
-    path('job/list/', JobListView.as_view())
+    path('job/list/', JobListView.as_view()),
+    
+
+    #about your company
+    path('jobs/', job_list),
+    path('jobs/<int:id>/', job_detail),
  
+    path('jobs/create/', create_job),
+    path('jobs/update/<int:id>/', update_job),
+    path('jobs/delete/<int:id>/', delete_job),
 
 ]
