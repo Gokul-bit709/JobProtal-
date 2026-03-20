@@ -1,6 +1,8 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
+    AdminUpdateComplaintView,
+    CompanyProfileCreateView,
     JobSeekerRegistrationView,
     EmployerRegistrationView,
     LoginView,
@@ -11,6 +13,7 @@ from .views import (
     DeleteNotificationView,
     ClearAllNotificationsView,
     NewsletterSubscribeAPIView,
+    SubmitComplaintView,
     UserSettingsView,
     SaveJobView,
     JobApplicationDetailView,
@@ -24,6 +27,7 @@ from .views import (
     MarkMessageReadView,
     ChatUsersView,
     EmployerInitiateChatView,
+    VerifyEmailOTPView,
     chat_api,
     ForgotPasswordView,
     ResetPasswordConfirmView,
@@ -40,11 +44,8 @@ from .views import (
     UpdateJobView,
     DeleteJobView,
     JobListView,
-    job_list,
-    job_detail,
-    create_job,
-    update_job,
-    delete_job,
+    CompanyProfileDetailView,
+    CompanyProfileUpdateView,AdminComplaintListView,
 
 )
 from . import views 
@@ -141,14 +142,16 @@ urlpatterns = [
     path('job/update/<int:pk>/', UpdateJobView.as_view()),
     path('job/delete/<int:pk>/', DeleteJobView.as_view()),
     path('job/list/', JobListView.as_view()),
-    
-
-    #about your company
-    path('jobs/', job_list),
-    path('jobs/<int:id>/', job_detail),
+    # Verify Email OTP
+    path('verify-email-otp/', VerifyEmailOTPView.as_view(), name='verify-email-otp'),
  
-    path('jobs/create/', create_job),
-    path('jobs/update/<int:id>/', update_job),
-    path('jobs/delete/<int:id>/', delete_job),
+    # About Company
+    path('company/profile/create/', CompanyProfileCreateView.as_view()),
+    path('company/profile/', CompanyProfileDetailView.as_view()),
+    path('company/profile/update/', CompanyProfileUpdateView.as_view()),
+    # Report A Job
+    path('complaints/submit/', SubmitComplaintView.as_view()),
+    path('admin/complaints/', AdminComplaintListView.as_view()),
+    path('admin/complaints/<int:pk>/', AdminUpdateComplaintView.as_view()),
 
 ]

@@ -1514,67 +1514,120 @@ class VerifyEmailOTPView(APIView):
  
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)    
+        
+
+
  
 
-from rest_framework.decorators import api_view
+ # About Company
+ 
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Job
-from .serializers import JobSerializer
+from .models import CompanyProfile
+from .serializers import CompanyProfileSerializer
+from .permissions import IsEmployerOrAdmin
+ 
+# ✅ CREATE
+class CompanyProfileCreateView(APIView):
+    permission_classes = [IsEmployerOrAdmin]
+ 
+    def post(self, request):
+ 
+        if CompanyProfile.objects.filter(user=request.user).exists():
+            return Response({"error": "Profile already exists"}, status=400)
+ 
+        serializer = CompanyProfileSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+ 
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Created successfully"})
+ 
+        return Response(serializer.errors, status=400)
  
  
+# ✅ GET
+class CompanyProfileDetailView(APIView):
+    permission_classes = [IsEmployerOrAdmin]
  
-@api_view(['GET'])
-def job_list(request):
-    jobs = Job.objects.all()
-    serializer = JobSerializer(jobs, many=True)
-    return Response(serializer.data)
- 
-@api_view(['GET'])
-def job_detail(request, id):
-    try:
-        job = Job.objects.get(id=id)
-    except Job.DoesNotExist:
-        return Response({"error": "Job not found"}, status=404)
- 
-    serializer = JobSerializer(job)
-    return Response(serializer.data)
+    def get(self, request):
+        try:
+            profile = CompanyProfile.objects.get(user=request.user)
+            return Response(CompanyProfileSerializer(profile).data)
+        except CompanyProfile.DoesNotExist:
+            return Response({"error": "Not found"}, status=404)
  
  
-@api_view(['POST'])
-def create_job(request):
-    serializer = JobSerializer(data=request.data)
+# ✅ UPDATE
+class CompanyProfileUpdateView(APIView):
+    permission_classes = [IsEmployerOrAdmin]
  
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=201)
+    def patch(self, request):
+        try:
+            profile = CompanyProfile.objects.get(user=request.user)
+        except CompanyProfile.DoesNotExist:
+            return Response({"error": "Not found"}, status=404)
  
-    return Response(serializer.errors, status=400)
+        serializer = CompanyProfileSerializer(
+            profile,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
+
+# Report A Job
+ 
+from .models import Complaint
+from .serializers import ComplaintSerializer
+from .permissions import IsJobSeeker, IsAdminUserType
+ 
+class SubmitComplaintView(APIView):
+    permission_classes = [IsAuthenticated, IsJobSeeker]
+ 
+    def post(self, request):
+        serializer = ComplaintSerializer(data=request.data, context={'request': request})
+ 
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+ 
+            return Response(
+                {"message": "Complaint submitted successfully"},
+                status=status.HTTP_201_CREATED
+            )
+ 
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
  
  
-@api_view(['PUT'])
-def update_job(request, id):
-    try:
-        job = Job.objects.get(id=id)
-    except Job.DoesNotExist:
-        return Response({"error": "Job not found"}, status=404)
+class AdminComplaintListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUserType]
  
-    serializer = JobSerializer(job, data=request.data)
+    def get(self, request):
+        complaints = Complaint.objects.all().order_by('-created_at')
  
-    if serializer.is_valid():
-        serializer.save()
+        # Optional filter
+        status_filter = request.GET.get("status")
+        if status_filter:
+            complaints = complaints.filter(status=status_filter)
+ 
+        serializer = ComplaintSerializer(complaints, many=True)
         return Response(serializer.data)
  
-    return Response(serializer.errors, status=400)
  
+class AdminUpdateComplaintView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUserType]
  
-@api_view(['DELETE'])
-def delete_job(request, id):
-    try:
-        job = Job.objects.get(id=id)
-    except Job.DoesNotExist:
-        return Response({"error": "Job not found"}, status=404)
+    def patch(self, request, pk):
+        try:
+            complaint = Complaint.objects.get(id=pk)
+        except Complaint.DoesNotExist:
+            return Response({"error": "Not found"}, status=404)
  
-    job.delete()
-    return Response({"message": "Job deleted successfully"})
+        complaint.status = request.data.get("status", complaint.status)
+        complaint.save()
+ 
+        return Response({"message": "Status updated"})
  

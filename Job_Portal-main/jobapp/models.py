@@ -856,49 +856,73 @@ class EmailOTP(models.Model):
     def is_valid(self):
         return timezone.now() < self.expires_at and not self.is_verified  
 
+
+
+# About Company
+ 
 from django.db import models
+from django.conf import settings
+ 
+User = settings.AUTH_USER_MODEL
  
  
-class AboutyourCompany(models.Model):
+class CompanyProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
  
-    title = models.CharField(max_length=200)
-    company = models.CharField(max_length=200)
-    companyId = models.CharField(max_length=50)
-    logo = models.URLField(blank=True)
+    company_name = models.CharField(max_length=255)
+    company_moto = models.CharField(max_length=255)
+    contact_person = models.CharField(max_length=255)
+    contact_number = models.CharField(max_length=15)
+    company_email = models.EmailField()
+    website = models.URLField()
  
-    posted = models.DateTimeField(auto_now_add=True)
-    PostedBy = models.CharField(max_length=100)
+    company_size = models.CharField(max_length=100)
  
-    IndustryType = models.CharField(max_length=200)
-    Department = models.CharField(max_length=200)
-    EducationRequired = models.CharField(max_length=200)
+    address1 = models.TextField()
+    address2 = models.TextField(blank=True, null=True)
  
-    KeySkills = models.TextField()
-    JobHighlights = models.TextField()
-    Responsibilities = models.TextField()
+    about = models.TextField()
  
-    WorkType = models.CharField(max_length=100)
-    Shift = models.CharField(max_length=100)
-    duration = models.CharField(max_length=100)
+    company_logo = models.ImageField(upload_to='company_logos/')
  
-    salary = models.CharField(max_length=100)
-    experience = models.CharField(max_length=100)
-    location = models.CharField(max_length=200)
- 
-    openings = models.IntegerField()
-    applicants = models.IntegerField(default=0)
- 
-    ratings = models.FloatField(default=0)
-    reviewNo = models.IntegerField(default=0)
- 
-    tags = models.CharField(max_length=200)
- 
-    companyOverview = models.TextField()
-    jobDescription = models.TextField()
- 
-    status_text = models.CharField(max_length=100)
-    status_type = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
  
     def __str__(self):
-        return self.title
+        return self.company_name        
+ 
+# Report a Job
+ 
+class Complaint(models.Model):
+ 
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        RESOLVED = 'resolved', 'Resolved'
+ 
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="complaints"
+    )
+ 
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    mobile = models.CharField(max_length=10)
+    email = models.EmailField()
+ 
+    reason = models.CharField(max_length=255)
+    explanation = models.TextField()
+ 
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING
+    )
+ 
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    class Meta:
+        ordering = ['-created_at']
+ 
+    def __str__(self):
+        return f"{self.first_name} - {self.reason}"
  

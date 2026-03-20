@@ -4,10 +4,10 @@ from drf_writable_nested.serializers import WritableNestedModelSerializer
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from .models import (
-    User, JobSeekerProfile, EmployerProfile, AdminProfile,
+      User, JobSeekerProfile, EmployerProfile, AdminProfile,
     EducationEntry, WorkExperienceEntry, Skill, LanguageKnown, Certification,
     Company, Job, JobApplication, SavedJob,
-    NewsletterSubscriber, Notification, Conversation, Message,ContactMessage,CompanyVerification,PostAJob
+    NewsletterSubscriber, Notification, Conversation, Message,ContactMessage,CompanyVerification,PostAJob,Complaint,
 )
  
 User = get_user_model()
@@ -998,12 +998,56 @@ class VerifyEmailOTPSerializer(serializers.Serializer):
     otp = serializers.CharField(max_length=6)
 
  
-from .models import Job
+# About Company Serializer
+ 
+from rest_framework import serializers
+from .models import CompanyProfile
  
  
-class AboutyourcompanySerializer(serializers.ModelSerializer):
+class CompanyProfileSerializer(serializers.ModelSerializer):
  
     class Meta:
-        model = Job
+        model = CompanyProfile
         fields = '__all__'
+        read_only_fields = ['user', 'created_at']
+ 
+    def create(self, validated_data):
+        user = self.context['request'].user
+        return CompanyProfile.objects.create(user=user, **validated_data)
+ 
+ # Report a Job Serializer
+ 
+class ComplaintSerializer(serializers.ModelSerializer):
+ 
+    firstName = serializers.CharField(source='first_name')
+    lastName = serializers.CharField(source='last_name')
+ 
+    class Meta:
+        model = Complaint
+        fields = [
+            'id',
+            'firstName',
+            'lastName',
+            'mobile',
+            'email',
+            'reason',
+            'explanation',
+            'status',
+            'created_at'
+        ]
+        read_only_fields = ['status', 'created_at']
+ 
+    def validate_mobile(self, value):
+        if not value.isdigit() or len(value) != 10:
+            raise serializers.ValidationError("Enter valid 10-digit mobile number")
+        return value
+ 
+    def validate(self, data):
+        user = self.context['request'].user
+ 
+       
+        if Complaint.objects.filter(user=user, reason=data.get('reason')).exists():
+            raise serializers.ValidationError("You already submitted this complaint")
+ 
+        return data
  
