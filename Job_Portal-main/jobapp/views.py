@@ -43,31 +43,30 @@ class JobSeekerRegistrationView(APIView):
     permission_classes = [AllowAny]
  
     def post(self, request):
+        email = request.data.get("email")
+ 
+        # ✅ CHECK EMAIL VERIFIED
+        email_verified = EmailOTP.objects.filter(
+            email=email,
+            purpose="email_verification",
+            is_verified=True
+        ).exists()
+ 
+        if not email_verified:
+            return Response({"error": "Please verify your email first"}, status=400)
+ 
         serializer = JobSeekerRegistrationSerializer(data=request.data)
  
         if serializer.is_valid():
             user = serializer.save()
- 
-            # Generate OTP
-            otp = generate_otp()
- 
-            # Save OTP
-            EmailOTP.objects.create(
-                user=user,
-                otp=otp,
-                purpose="signup",
-                expires_at=timezone.now() + timedelta(minutes=10)
-            )
- 
-            # Send OTP to email
-            send_email_otp(user, otp, "signup")
+            user.is_active = True
+            user.save()
  
             return Response({
-                "message": "OTP sent to your email. Please verify.",
-                "user": UserReadSerializer(user).data
-            }, status=status.HTTP_201_CREATED)
+                "message": "User registered successfully"
+            }, status=201)
  
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=400)
  
  
 class EmployerRegistrationView(APIView):
@@ -75,30 +74,34 @@ class EmployerRegistrationView(APIView):
  
     def post(self, request):
         print(f"Registration data received: {request.data}")
+       
+        # Get email from request
+        email = request.data.get("email")
+       
+        # Check if email is verified
+        email_verified = EmailOTP.objects.filter(
+            email=email,
+            purpose="email_verification",
+            is_verified=True
+        ).exists()
+       
+        if not email_verified:
+            return Response(
+                {"error": "Please verify your email first"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
  
         serializer = EmployerRegistrationSerializer(data=request.data)
  
         if serializer.is_valid():
             user = serializer.save()
+            user.is_active = True
+            user.save()
  
             print(f"User created: {user.email}, Type: {user.user_type}")
  
-            # Generate OTP
-            otp = generate_otp()
- 
-            # Save OTP
-            EmailOTP.objects.create(
-                user=user,
-                otp=otp,
-                purpose="signup",
-                expires_at=timezone.now() + timedelta(minutes=10)
-            )
- 
-            # Send OTP
-            send_email_otp(user, otp, "signup")
- 
             return Response({
-                "message": "OTP sent to your email. Please verify.",
+                "message": "User registered successfully",
                 "user": {
                     "id": user.id,
                     "email": user.email,
@@ -111,8 +114,6 @@ class EmployerRegistrationView(APIView):
         print(f"Registration errors: {serializer.errors}")
  
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
- 
- 
  
  
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -1529,6 +1530,187 @@ from .models import CompanyProfile
 from .serializers import CompanyProfileSerializer
 from .permissions import IsEmployerOrAdmin
  
+# CREATE
+class CompanyProfileCreateView(APIView):
+    permission_classes = [IsEmployerOrAdmin]
+ 
+    def post(self, request):
+ 
+        if CompanyProfile.objects.filter(user=request.user).exists():
+            return Response({"error": "Profile already exists"}, status=400)
+ 
+        serializer = CompanyProfileSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+ 
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Created successfully"})
+ 
+        return Response(serializer.errors, status=400) 
+        
+         
+    
+ 
+ 
+# GET
+class CompanyProfileDetailView(APIView):
+    permission_classes = [IsEmployerOrAdmin]
+ 
+    def get(self, request):
+        try:
+            profile = CompanyProfile.objects.get(user=request.user)
+            return Response(CompanyProfileSerializer(profile).data)
+        except CompanyProfile.DoesNotExist:
+            return Response({"error": "Not found"}, status=404)
+ 
+ 
+# UPDATE
+class CompanyProfileUpdateView(APIView):
+    permission_classes = [IsEmployerOrAdmin]
+ 
+    def patch(self, request):
+        try:
+            profile = CompanyProfile.objects.get(user=request.user)
+        except CompanyProfile.DoesNotExist:
+            return Response({"error": "Not found"}, status=404)
+ 
+        serializer = CompanyProfileSerializer(
+            profile,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "message": "Profile updated successfully",
+                "data": serializer.data
+            }, status=200)
+       
+        return Response(serializer.errors, status=400)
+    
+# OTP
+
+class SendEmailOTPView(APIView):
+    permission_classes = [AllowAny]
+ 
+    def post(self, request):
+        email = request.data.get("email")
+ 
+        if not email:
+            return Response({"error": "Email is required"}, status=400)
+ 
+        # ❌ prevent duplicate accounts
+        if User.objects.filter(email=email).exists():
+            return Response({"error": "Email already registered"}, status=400)
+ 
+        otp = generate_otp()
+ 
+        # Save OTP (NO USER YET)
+        EmailOTP.objects.create(
+            email=email,   # ⚠️ make sure model supports this
+            otp=otp,
+            purpose="email_verification",
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+ 
+        send_email_otp(email, otp, "signup")
+ 
+        return Response({"message": "OTP sent to email"})
+ 
+ 
+ 
+ 
+ 
+class VerifyEmailOTPView(APIView):
+    permission_classes = [AllowAny]
+ 
+    def post(self, request):
+        email = request.data.get("email")
+        otp = request.data.get("otp")
+ 
+        otp_obj = EmailOTP.objects.filter(
+            email=email,
+            otp=otp,
+            purpose="email_verification",
+            is_verified=False
+        ).last()
+ 
+        if not otp_obj or not otp_obj.is_valid():
+            return Response({"error": "Invalid or expired OTP"}, status=400)
+ 
+        otp_obj.is_verified = True
+        otp_obj.save()
+ 
+        return Response({"message": "Email verified successfully"})
+ 
+
+# Report A Job
+ 
+from .models import Complaint
+from .serializers import ComplaintSerializer
+from .permissions import IsJobSeeker, IsAdminUserType
+ 
+class SubmitComplaintView(APIView):
+    permission_classes = [IsAuthenticated, IsJobSeeker]
+ 
+    def post(self, request):
+        serializer = ComplaintSerializer(data=request.data, context={'request': request})
+ 
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+ 
+            return Response(
+                {"message": "Complaint submitted successfully"},
+                status=status.HTTP_201_CREATED
+            )
+ 
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+ 
+ 
+class AdminComplaintListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def get(self, request):
+        complaints = Complaint.objects.all().order_by('-created_at')
+ 
+       
+        status_filter = request.GET.get("status")
+        if status_filter:
+            complaints = complaints.filter(status=status_filter)
+ 
+        serializer = ComplaintSerializer(complaints, many=True)
+        return Response(serializer.data)
+ 
+ 
+class AdminUpdateComplaintView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def patch(self, request, pk):
+        try:
+            complaint = Complaint.objects.get(id=pk)
+        except Complaint.DoesNotExist:
+            return Response({"error": "Not found"}, status=404)
+ 
+        complaint.status = request.data.get("status", complaint.status)
+        complaint.save()
+ 
+        return Response({"message": "Status updated"})
+ 
+
+# About Company
+ 
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from .models import CompanyProfile
+from .serializers import CompanyProfileSerializer
+from .permissions import IsEmployerOrAdmin
+ 
 # ✅ CREATE
 class CompanyProfileCreateView(APIView):
     permission_classes = [IsEmployerOrAdmin]
@@ -1578,56 +1760,10 @@ class CompanyProfileUpdateView(APIView):
             partial=True,
             context={'request': request}
         )
-
-# Report A Job
- 
-from .models import Complaint
-from .serializers import ComplaintSerializer
-from .permissions import IsJobSeeker, IsAdminUserType
- 
-class SubmitComplaintView(APIView):
-    permission_classes = [IsAuthenticated, IsJobSeeker]
- 
-    def post(self, request):
-        serializer = ComplaintSerializer(data=request.data, context={'request': request})
  
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            serializer.save()
+            return Response({"message": "Updated successfully"})
  
-            return Response(
-                {"message": "Complaint submitted successfully"},
-                status=status.HTTP_201_CREATED
-            )
- 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
- 
- 
-class AdminComplaintListView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUserType]
- 
-    def get(self, request):
-        complaints = Complaint.objects.all().order_by('-created_at')
- 
-        # Optional filter
-        status_filter = request.GET.get("status")
-        if status_filter:
-            complaints = complaints.filter(status=status_filter)
- 
-        serializer = ComplaintSerializer(complaints, many=True)
-        return Response(serializer.data)
- 
- 
-class AdminUpdateComplaintView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUserType]
- 
-    def patch(self, request, pk):
-        try:
-            complaint = Complaint.objects.get(id=pk)
-        except Complaint.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
- 
-        complaint.status = request.data.get("status", complaint.status)
-        complaint.save()
- 
-        return Response({"message": "Status updated"})
+        return Response(serializer.errors, status=400)
  

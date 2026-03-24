@@ -838,23 +838,9 @@ class PostAJob(models.Model):
     def __str__(self):
         return self.job_title
     
-# OTP
  
-class EmailOTP(models.Model):
-    PURPOSE_CHOICES = (
-        ('signup', 'Signup'),
-        ('login', 'Login'),
-    )
  
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    otp = models.CharField(max_length=6)
-    purpose = models.CharField(max_length=10, choices=PURPOSE_CHOICES)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    is_verified = models.BooleanField(default=False)
  
-    def is_valid(self):
-        return timezone.now() < self.expires_at and not self.is_verified  
 
 
 
@@ -925,4 +911,56 @@ class Complaint(models.Model):
  
     def __str__(self):
         return f"{self.first_name} - {self.reason}"
+
+# OTP 
+
+class EmailOTP(models.Model):
+    PURPOSE_CHOICES = (
+        ('signup', 'Signup'),
+        ('login', 'Login'),
+    )
+ 
+    email = models.EmailField(null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)  
+ 
+    otp = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=10, choices=PURPOSE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_verified = models.BooleanField(default=False)
+ 
+    def is_valid(self):
+        return timezone.now() < self.expires_at and not self.is_verified
+    
+# About Company
+
+from django.db import models
+from django.conf import settings
+ 
+User = settings.AUTH_USER_MODEL
+ 
+ 
+class CompanyProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+ 
+    company_name = models.CharField(max_length=255)
+    company_moto = models.CharField(max_length=255)
+    contact_person = models.CharField(max_length=255)
+    contact_number = models.CharField(max_length=15)
+    company_email = models.EmailField()
+    website = models.URLField()
+ 
+    company_size = models.CharField(max_length=100)
+ 
+    address1 = models.TextField()
+    address2 = models.TextField(blank=True, null=True)
+ 
+    about = models.TextField()
+ 
+    company_logo = models.ImageField(upload_to='company_logos/')
+ 
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    def __str__(self):
+        return self.company_name
  

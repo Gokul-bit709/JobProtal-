@@ -126,6 +126,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             phone=validated_data.get('phone', ''),
             user_type=user_type  # This will be set by Employer/JobSeeker serializers
         )
+
+        user.is_active = False    
+        user.save()
         return user
  
  
@@ -164,6 +167,8 @@ class EmployerRegistrationSerializer(UserRegistrationSerializer):
             phone=validated_data.get('phone', ''),
             user_type=User.UserType.EMPLOYER  # Explicitly set here too
         )
+        user.is_active = False    
+        user.save()
         # Create employer profile
         EmployerProfile.objects.create(user=user)
         return user
@@ -1050,4 +1055,21 @@ class ComplaintSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("You already submitted this complaint")
  
         return data
+ 
+ # About Company Serializer
+ 
+from rest_framework import serializers
+from .models import CompanyProfile
+ 
+ 
+class CompanyProfileSerializer(serializers.ModelSerializer):
+ 
+    class Meta:
+        model = CompanyProfile
+        fields = '__all__'
+        read_only_fields = ['user', 'created_at']
+ 
+    def create(self, validated_data):
+        user = self.context['request'].user
+        return CompanyProfile.objects.create(user=user, **validated_data)    
  
