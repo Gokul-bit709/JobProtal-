@@ -69,7 +69,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
  
         if not user.is_active:
             raise serializers.ValidationError({
-                "detail": "This account is inactive."
+                "detail": "Account inactive"
             })
  
        
