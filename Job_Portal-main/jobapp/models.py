@@ -808,8 +808,8 @@ class PostAJob(models.Model):
     employer = models.ForeignKey(User, on_delete=models.CASCADE)
  
     job_title = models.CharField(max_length=255)
-    industry_type = models.CharField(max_length=255)
-    department = models.CharField(max_length=255)
+    industry_type = models.CharField(max_length=255,default=list)
+    department = models.CharField(max_length=255,default=list)
  
     work_type = models.CharField(max_length=50, choices=WorkType.choices)
     shift = models.CharField(max_length=50, choices=Shift.choices)
@@ -818,18 +818,18 @@ class PostAJob(models.Model):
     salary = models.DecimalField(max_digits=10, decimal_places=2)
  
     experience = models.CharField(max_length=100)
-    location = models.CharField(max_length=255)
+    location = models.CharField(max_length=255,default=list)
  
     openings = models.PositiveIntegerField()
  
-    job_category = models.CharField(max_length=255)
-    education = models.CharField(max_length=255)
+    job_category = models.CharField(max_length=255,default=list)
+    education = models.CharField(max_length=255,default=list)
  
-    key_skills = models.TextField()
-    job_highlights = models.TextField()
+    key_skills = models.TextField(default=list)
+    job_highlights = models.TextField(default=list)
  
-    job_description = models.TextField()
-    responsibilities = models.TextField()
+    job_description = models.TextField(default=list)
+    responsibilities = models.TextField(default=list)
  
     is_published = models.BooleanField(default=False, db_index=True)  
  
@@ -932,35 +932,93 @@ class EmailOTP(models.Model):
     def is_valid(self):
         return timezone.now() < self.expires_at and not self.is_verified
     
-# About Company
+# About Complaint
 
-from django.db import models
-from django.conf import settings
  
-User = settings.AUTH_USER_MODEL
- 
- 
-class CompanyProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
- 
-    company_name = models.CharField(max_length=255)
-    company_moto = models.CharField(max_length=255)
-    contact_person = models.CharField(max_length=255)
-    contact_number = models.CharField(max_length=15)
-    company_email = models.EmailField()
-    website = models.URLField()
- 
-    company_size = models.CharField(max_length=100)
- 
-    address1 = models.TextField()
-    address2 = models.TextField(blank=True, null=True)
- 
-    about = models.TextField()
- 
-    company_logo = models.ImageField(upload_to='company_logos/')
- 
+class Complaint(models.Model):
+   
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        RESOLVED = 'resolved', 'Resolved'
+        INVESTIGATING = 'investigating', 'Under Investigation'
+        REJECTED = 'rejected', 'Rejected'
+   
+    # User who is reporting
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="complaints"
+    )
+   
+    # The job being reported
+    reported_job = models.ForeignKey(
+        'Job',
+        on_delete=models.CASCADE,
+        related_name="complaints",
+        null=True,
+        blank=True
+    )
+   
+    # Denormalized fields for quick access
+    reported_job_title = models.CharField(max_length=255, blank=True)
+    reported_employer_name = models.CharField(max_length=255, blank=True)
+    reported_company_name = models.CharField(max_length=255, blank=True)
+   
+    # Reporter details
+    first_name = models.CharField(max_length=100)
+    last_name = models.CharField(max_length=100)
+    mobile = models.CharField(max_length=10)
+    email = models.EmailField()
+   
+    # Complaint details
+    reason = models.CharField(max_length=255)
+    explanation = models.TextField()
+   
+    # Status
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING
+    )
+   
+    # Admin fields
+    admin_notes = models.TextField(blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_complaints"
+    )
+   
+    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
- 
+    updated_at = models.DateTimeField(auto_now=True)
+   
+    class Meta:
+        ordering = ['-created_at']
+        # IMPORTANT: Only prevent duplicate reports for the SAME job
+        # This allows reporting different jobs from the same employer
+        unique_together = ['user', 'reported_job']
+        indexes = [
+            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['reported_job', 'status']),
+            models.Index(fields=['user', 'reported_job']),
+        ]
+   
     def __str__(self):
-        return self.company_name
+        if self.reported_job:
+            return f"{self.first_name} reported '{self.reported_job.title}' (Job ID: {self.reported_job.id}) - {self.reason}"
+        return f"{self.first_name} reported a job - {self.reason}"
+   
+    def save(self, *args, **kwargs):
+        # Auto-populate job details if reported_job exists
+        if self.reported_job:
+            self.reported_job_title = self.reported_job.title
+            if hasattr(self.reported_job, 'company'):
+                self.reported_employer_name = self.reported_job.company.name
+                self.reported_company_name = self.reported_job.company.name
+       
+        super().save(*args, **kwargs)
  

@@ -312,41 +312,53 @@ class CompanyProfileAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at',)   
     
      
+from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
+from django.utils import timezone
+from .models import Complaint
+ 
 @admin.register(Complaint)
 class ComplaintAdmin(admin.ModelAdmin):
- 
+   
     list_display = (
-        'full_name',  
+        'id',
+        'full_name',
         'email',
         'mobile',
+        'reported_job_title',
+        'reported_employer_name',
         'reason',
         'status',
         'created_at'
     )
- 
+   
     list_filter = ('status', 'created_at')
- 
+   
     search_fields = (
         'first_name',
         'last_name',
         'email',
         'mobile',
-        'reason'
+        'reason',
+        'explanation',
+        'reported_job_title',
+        'reported_employer_name'
     )
- 
+   
     ordering = ('-created_at',)
- 
-    readonly_fields = ('created_at', 'user')
- 
+   
+    readonly_fields = ('created_at', 'updated_at', 'user')
+   
     list_per_page = 20
- 
    
     def full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}"
- 
- 
-    full_name.short_description = "Full Name"
- 
+    full_name.short_description = 'Reporter'
    
-    full_name.admin_order_field = 'first_name'
+    def save_model(self, request, obj, form, change):
+        if obj.status == 'resolved' and not obj.resolved_at:
+            obj.resolved_at = timezone.now()
+            obj.resolved_by = request.user
+        super().save_model(request, obj, form, change)
  

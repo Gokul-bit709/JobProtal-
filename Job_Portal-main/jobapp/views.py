@@ -1650,7 +1650,14 @@ class VerifyEmailOTPView(APIView):
 
 # Report A Job
  
-from .models import Complaint
+ 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from django.db.models import Q, Count
+from django.utils import timezone
+from .models import Complaint, Job
 from .serializers import ComplaintSerializer
 from .permissions import IsJobSeeker, IsAdminUserType
  
@@ -1661,10 +1668,19 @@ class SubmitComplaintView(APIView):
         serializer = ComplaintSerializer(data=request.data, context={'request': request})
  
         if serializer.is_valid():
-            serializer.save(user=request.user)
+            complaint = serializer.save(user=request.user)
+           
+            # Get employer info for response
+            employer_name = complaint.reported_job.company.name if complaint.reported_job and complaint.reported_job.company else "Unknown"
  
             return Response(
-                {"message": "Complaint submitted successfully"},
+                {
+                    "message": "Complaint submitted successfully",
+                    "complaint_id": complaint.id,
+                    "reported_job": complaint.reported_job.title,
+                    "employer": employer_name,
+                    "status": complaint.get_status_display()
+                },
                 status=status.HTTP_201_CREATED
             )
  
@@ -1675,15 +1691,168 @@ class AdminComplaintListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUserType]
  
     def get(self, request):
-        complaints = Complaint.objects.all().order_by('-created_at')
- 
+        # Select related to optimize queries
+        complaints = Complaint.objects.select_related(
+            'user', 'reported_job', 'reported_job__company'
+        ).order_by('-created_at')
        
+        # Apply filters
         status_filter = request.GET.get("status")
         if status_filter:
             complaints = complaints.filter(status=status_filter)
- 
+       
+        # Filter by job ID
+        job_id = request.GET.get("job_id")
+        if job_id:
+            complaints = complaints.filter(reported_job_id=job_id)
+       
+        # Filter by company/employer ID
+        company_id = request.GET.get("company_id")
+        if company_id:
+            complaints = complaints.filter(reported_job__company_id=company_id)
+       
+        # Filter by company/employer name
+        company_name = request.GET.get("company_name")
+        if company_name:
+            complaints = complaints.filter(
+                Q(reported_job__company__name__icontains=company_name) |
+                Q(reported_employer_name__icontains=company_name)
+            )
+       
+        # Filter by reporter name
+        reporter_name = request.GET.get("reporter_name")
+        if reporter_name:
+            complaints = complaints.filter(
+                Q(first_name__icontains=reporter_name) |
+                Q(last_name__icontains=reporter_name)
+            )
+       
+        # Filter by date range
+        from_date = request.GET.get("from_date")
+        if from_date:
+            complaints = complaints.filter(created_at__gte=from_date)
+       
+        to_date = request.GET.get("to_date")
+        if to_date:
+            complaints = complaints.filter(created_at__lte=to_date)
+       
+        # Get summary statistics
+        summary = {
+            "total_complaints": complaints.count(),
+            "pending": complaints.filter(status='pending').count(),
+            "resolved": complaints.filter(status='resolved').count(),
+            "investigating": complaints.filter(status='investigating').count(),
+            "rejected": complaints.filter(status='rejected').count(),
+            "unique_jobs_reported": complaints.values('reported_job').distinct().count(),
+            "unique_companies_reported": complaints.values('reported_job__company').distinct().count(),
+            "reports_last_24h": complaints.filter(
+                created_at__gte=timezone.now() - timezone.timedelta(hours=24)
+            ).count(),
+        }
+       
+        # Get most reported companies
+        most_reported_companies = complaints.values(
+            'reported_job__company__id',
+            'reported_job__company__name',
+            'reported_employer_name'
+        ).annotate(
+            report_count=Count('id'),
+            unique_reporters=Count('user', distinct=True)
+        ).order_by('-report_count')[:10]
+       
         serializer = ComplaintSerializer(complaints, many=True)
-        return Response(serializer.data)
+       
+        return Response({
+            "summary": summary,
+            "most_reported_companies": most_reported_companies,
+            "complaints": serializer.data
+        })
+ 
+ 
+class AdminCompanyComplaintsView(APIView):
+    """View all complaints for a specific company/employer"""
+    permission_classes = [IsAuthenticated, IsAdminUserType]
+   
+    def get(self, request, company_id):
+        complaints = Complaint.objects.filter(
+            reported_job__company_id=company_id
+        ).select_related('user', 'reported_job').order_by('-created_at')
+       
+        if not complaints.exists():
+            return Response({
+                "message": "No complaints found for this company",
+                "company_id": company_id
+            }, status=200)
+       
+        # Get company info
+        company = complaints.first().reported_job.company
+       
+        # Get statistics for this company
+        stats = {
+            "total_complaints": complaints.count(),
+            "pending": complaints.filter(status='pending').count(),
+            "resolved": complaints.filter(status='resolved').count(),
+            "unique_jobs_reported": complaints.values('reported_job').distinct().count(),
+            "unique_reporters": complaints.values('user').distinct().count(),
+            "most_common_reason": complaints.values('reason').annotate(
+                count=Count('id')
+            ).order_by('-count').first()
+        }
+       
+        serializer = ComplaintSerializer(complaints, many=True)
+       
+        return Response({
+            "company": {
+                "id": company.id,
+                "name": company.name,
+                "website": company.website,
+                "is_verified": company.is_verified
+            },
+            "stats": stats,
+            "complaints": serializer.data
+        })
+ 
+ 
+class AdminUserComplaintsView(APIView):
+    """View all complaints by a specific user"""
+    permission_classes = [IsAuthenticated, IsAdminUserType]
+   
+    def get(self, request, user_id):
+        complaints = Complaint.objects.filter(
+            user_id=user_id
+        ).select_related('reported_job', 'reported_job__company').order_by('-created_at')
+       
+        if not complaints.exists():
+            return Response({
+                "message": "No complaints found for this user",
+                "user_id": user_id
+            }, status=200)
+       
+        # Get user info
+        user = complaints.first().user
+       
+        # Get statistics for this user
+        stats = {
+            "total_complaints": complaints.count(),
+            "pending": complaints.filter(status='pending').count(),
+            "resolved": complaints.filter(status='resolved').count(),
+            "unique_jobs_reported": complaints.values('reported_job').distinct().count(),
+            "unique_companies_reported": complaints.values('reported_job__company').distinct().count(),
+            "last_report_date": complaints.first().created_at if complaints.exists() else None
+        }
+       
+        serializer = ComplaintSerializer(complaints, many=True)
+       
+        return Response({
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "user_type": user.user_type
+            },
+            "stats": stats,
+            "complaints": serializer.data
+        })
  
  
 class AdminUpdateComplaintView(APIView):
@@ -1693,12 +1862,100 @@ class AdminUpdateComplaintView(APIView):
         try:
             complaint = Complaint.objects.get(id=pk)
         except Complaint.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
- 
-        complaint.status = request.data.get("status", complaint.status)
+            return Response({"error": "Complaint not found"}, status=404)
+       
+        # Update status
+        new_status = request.data.get("status")
+        if new_status:
+            complaint.status = new_status
+           
+            # If resolved, set resolved_at and resolved_by
+            if new_status == 'resolved' and not complaint.resolved_at:
+                complaint.resolved_at = timezone.now()
+                complaint.resolved_by = request.user
+       
+        # Update admin notes if provided
+        admin_notes = request.data.get("admin_notes")
+        if admin_notes:
+            complaint.admin_notes = admin_notes
+       
         complaint.save()
+       
+        # Get employer name for response
+        employer_name = complaint.reported_job.company.name if complaint.reported_job and complaint.reported_job.company else "Unknown"
  
-        return Response({"message": "Status updated"})
+        return Response({
+            "message": "Complaint updated successfully",
+            "complaint_id": complaint.id,
+            "status": complaint.get_status_display(),
+            "reported_job": complaint.reported_job.title if complaint.reported_job else None,
+            "employer": employer_name
+        })
+ 
+ 
+class CheckJobReportStatusView(APIView):
+    """Check if the current user has already reported a specific job"""
+    permission_classes = [IsAuthenticated]
+   
+    def get(self, request, job_id):
+        try:
+            # Check if job exists
+            job = Job.objects.get(id=job_id)
+        except Job.DoesNotExist:
+            return Response({"error": "Job not found"}, status=404)
+       
+        # Check if user has reported this specific job
+        complaint = Complaint.objects.filter(
+            user=request.user,
+            reported_job_id=job_id
+        ).first()
+       
+        if complaint:
+            return Response({
+                "has_reported": True,
+                "complaint_id": complaint.id,
+                "status": complaint.status,
+                "status_display": complaint.get_status_display(),
+                "reported_at": complaint.created_at,
+                "reason": complaint.reason
+            })
+       
+        return Response({
+            "has_reported": False,
+            "message": "You have not reported this job"
+        })
+ 
+ 
+class UserReportHistoryView(APIView):
+    """Get all reports made by the current user"""
+    permission_classes = [IsAuthenticated]
+   
+    def get(self, request):
+        complaints = Complaint.objects.filter(
+            user=request.user
+        ).select_related('reported_job', 'reported_job__company').order_by('-created_at')
+       
+        # Get statistics
+        stats = {
+            "total_reports": complaints.count(),
+            "pending": complaints.filter(status='pending').count(),
+            "resolved": complaints.filter(status='resolved').count(),
+            "investigating": complaints.filter(status='investigating').count(),
+            "rejected": complaints.filter(status='rejected').count(),
+            "unique_companies_reported": complaints.values('reported_job__company').distinct().count(),
+            "reports_last_30_days": complaints.filter(
+                created_at__gte=timezone.now() - timezone.timedelta(days=30)
+            ).count()
+        }
+       
+        serializer = ComplaintSerializer(complaints, many=True)
+       
+        return Response({
+            "stats": stats,
+            "complaints": serializer.data
+        })
+ 
+ 
  
 
 # About Company

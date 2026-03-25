@@ -151,10 +151,37 @@ urlpatterns = [
     path('company/profile/create/', CompanyProfileCreateView.as_view()),
     path('company/profile/', CompanyProfileDetailView.as_view()),
     path('company/profile/update/', CompanyProfileUpdateView.as_view()),
+    
     # Report A Job
-    path('complaints/submit/', SubmitComplaintView.as_view()),
-    path('admin/complaints/', AdminComplaintListView.as_view()),
-    path('admin/complaints/<int:pk>/', AdminUpdateComplaintView.as_view()),
+    path('api/complaints/submit/',
+         views.SubmitComplaintView.as_view(),
+         name='submit_complaint'),
+   
+    path('api/complaints/job/<int:job_id>/status/',
+         views.CheckJobReportStatusView.as_view(),
+         name='check_job_report_status'),
+   
+    path('api/complaints/my-reports/',
+         views.UserReportHistoryView.as_view(),
+         name='my_reports'),
+   
+    # Admin endpoints
+    path('api/admin/complaints/',
+         views.AdminComplaintListView.as_view(),
+         name='admin_complaints'),
+   
+    path('api/admin/complaints/<int:pk>/update/',
+         views.AdminUpdateComplaintView.as_view(),
+         name='update_complaint'),
+   
+    path('api/admin/companies/<int:company_id>/complaints/',
+         views.AdminCompanyComplaintsView.as_view(),
+         name='company_complaints'),
+   
+    path('api/admin/users/<int:user_id>/complaints/',
+         views.AdminUserComplaintsView.as_view(),
+         name='user_complaints'),
+ 
 
     # About Company
     path('company/profile/create/', CompanyProfileCreateView.as_view()),

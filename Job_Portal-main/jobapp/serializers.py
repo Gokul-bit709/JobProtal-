@@ -1022,11 +1022,24 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
  
  # Report a Job Serializer
  
-class ComplaintSerializer(serializers.ModelSerializer):
  
+from rest_framework import serializers
+from django.utils import timezone
+from .models import Complaint, Job
+ 
+class ComplaintSerializer(serializers.ModelSerializer):
+    # Custom fields for display
     firstName = serializers.CharField(source='first_name')
     lastName = serializers.CharField(source='last_name')
- 
+   
+    # Job related fields
+    job_details = serializers.SerializerMethodField()
+    reported_job_title_display = serializers.CharField(source='reported_job_title', read_only=True)
+    reported_company_display = serializers.CharField(source='reported_employer_name', read_only=True)
+   
+    # For creating complaint (write-only)
+    job_id = serializers.IntegerField(write_only=True, required=True)  # Make required
+   
     class Meta:
         model = Complaint
         fields = [
@@ -1038,23 +1051,116 @@ class ComplaintSerializer(serializers.ModelSerializer):
             'reason',
             'explanation',
             'status',
-            'created_at'
+            'created_at',
+            'updated_at',
+            'reported_job',
+            'job_id',
+            'job_details',
+            'reported_job_title_display',
+            'reported_company_display',
+            'admin_notes'
         ]
-        read_only_fields = ['status', 'created_at']
- 
+        read_only_fields = ['status', 'created_at', 'updated_at', 'reported_job', 'admin_notes']
+   
+    def get_job_details(self, obj):
+        """Get detailed job information for admin view"""
+        if obj.reported_job:
+            return {
+                'id': obj.reported_job.id,
+                'title': obj.reported_job.title,
+                'location': obj.reported_job.location,
+                'salary': obj.reported_job.salary,
+                'job_type': obj.reported_job.job_type,
+                'work_type': obj.reported_job.work_type,
+                'experience_required': obj.reported_job.experience_required,
+                'company': {
+                    'id': obj.reported_job.company.id if obj.reported_job.company else None,
+                    'name': obj.reported_job.company.name if obj.reported_job.company else '',
+                } if obj.reported_job.company else None,
+                'posted_date': obj.reported_job.posted_date,
+                'is_active': obj.reported_job.is_active
+            }
+        return None
+   
+    def validate_job_id(self, value):
+        """Validate that the job exists"""
+        try:
+            job = Job.objects.select_related('company').get(id=value)
+            if not job.is_active:
+                raise serializers.ValidationError("Cannot report an inactive job.")
+            return value
+        except Job.DoesNotExist:
+            raise serializers.ValidationError("The job you're reporting does not exist.")
+   
     def validate_mobile(self, value):
         if not value.isdigit() or len(value) != 10:
             raise serializers.ValidationError("Enter valid 10-digit mobile number")
         return value
- 
+   
     def validate(self, data):
         user = self.context['request'].user
- 
+        job_id = data.get('job_id')
        
-        if Complaint.objects.filter(user=user, reason=data.get('reason')).exists():
-            raise serializers.ValidationError("You already submitted this complaint")
- 
+        # Check if user has already reported THIS SPECIFIC job
+        # This is the key validation - prevents reporting same job multiple times
+        if job_id:
+            existing_report_for_same_job = Complaint.objects.filter(
+                user=user,
+                reported_job_id=job_id
+            ).exclude(status='resolved').first()
+           
+            if existing_report_for_same_job:
+                raise serializers.ValidationError({
+                    'job_id': f"You have already reported this specific job. Status: {existing_report_for_same_job.get_status_display()}"
+                })
+       
+        # Optional: Add rate limiting to prevent spam
+        # Check how many reports user has made in last 24 hours
+        twenty_four_hours_ago = timezone.now() - timezone.timedelta(hours=24)
+        recent_reports = Complaint.objects.filter(
+            user=user,
+            created_at__gte=twenty_four_hours_ago
+        ).count()
+       
+        if recent_reports >= 10:  # Max 10 reports per day
+            raise serializers.ValidationError(
+                "You have reached the daily limit of 10 reports. Please try again tomorrow."
+            )
+       
+        # Validate explanation length
+        explanation = data.get('explanation', '')
+        if len(explanation) < 20:
+            raise serializers.ValidationError({
+                'explanation': "Please provide more details (minimum 20 characters)."
+            })
+       
         return data
+   
+    def create(self, validated_data):
+        user = self.context['request'].user
+        job_id = validated_data.pop('job_id')
+       
+        # Get the job
+        job = Job.objects.get(id=job_id)
+        validated_data['reported_job'] = job
+       
+        # Auto-fill user details from profile if not provided
+        if not validated_data.get('first_name'):
+            validated_data['first_name'] = user.first_name or user.username
+        if not validated_data.get('last_name'):
+            validated_data['last_name'] = ''
+        if not validated_data.get('email'):
+            validated_data['email'] = user.email
+        if not validated_data.get('mobile'):
+            if hasattr(user, 'jobseeker_profile'):
+                validated_data['mobile'] = user.jobseeker_profile.alternate_phone or user.phone or ''
+            else:
+                validated_data['mobile'] = user.phone or ''
+       
+        # Create complaint
+        complaint = Complaint.objects.create(user=user, **validated_data)
+       
+        return complaint
  
  # About Company Serializer
  
