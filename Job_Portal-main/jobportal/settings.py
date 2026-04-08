@@ -195,4 +195,11 @@ CHANNEL_LAYERS = {
     }
 }
 
-FRONTEND_URL = 'http://localhost:5173'
+import os
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+
+RAZORPAY_KEY = 'rzp_test_Sas2pzeBQ0EZAi'
+RAZORPAY_SECRET = '517P0G6FJx9HqA3w4t3aOn4o'
+RAZORPAY_WEBHOOK_SECRET = ''

@@ -1,15 +1,19 @@
-# views.py (only user + profile)
-from flask import views
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.response import Response
-from rest_framework import status
- 
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.decorators import api_view
+from django.utils import timezone
+from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404
+from django.db import IntegrityError
+from django.db.models import Q, Count
+from datetime import timedelta
+
 from .serializers import (
     JobSeekerRegistrationSerializer,
     EmployerRegistrationSerializer,
@@ -17,89 +21,117 @@ from .serializers import (
     JobSeekerProfileWriteSerializer,
     EmployerProfileReadSerializer,
     EmployerProfileWriteSerializer,
-    UserReadSerializer  ,
+    UserReadSerializer,
     JobApplicationDetailSerializer,
-    NotificationSerializer ,CustomTokenObtainPairSerializer,
+    NotificationSerializer,
+    CustomTokenObtainPairSerializer,
     ContactMessageSerializer,
+    # REMOVED: CompanySerializer
+    PostAJobSerializer,
+    JobReadSerializer,
+    JobWriteSerializer,
+    JobUpdateSerializer,
+    JobApplicationWriteSerializer,
+    JobApplicationEmployerSerializer,
+    JobApplicationListSerializer,
+    SavedJobSerializer,
+    UserSettingsSerializer,
+    ConversationSerializer,
+    MessageSerializer,
+    SendMessageSerializer,
+    ChatUserSerializer,
+    ChatMessageSerializer,
+    HelpTopicSerializer,
+    RaiseTicketSerializer,
+    ForgotPasswordSerializer,
+    ResetPasswordConfirmSerializer,
+    CreatePasswordSerializer,
+    NewsletterSubscriberSerializer,
+    CompanyVerificationSerializer,
+    CompanyProfileSerializer,
+    ComplaintSerializer,
+    VerifyEmailOTPSerializer,
+    PlanSerializer,
+    SubscriptionSerializer,
+    InvoiceSerializer,
+    PaymentMethodSerializer,
+
 )
- 
- 
+
+from .models import (
+    User, JobSeekerProfile, EmployerProfile, PostAJob, 
+    JobApplication, SavedJob, Notification, UserSettings,
+    Conversation, Message, ChatMessage, HelpTopic, RaiseTicket,
+    PasswordResetToken, EmailOTP, NewsletterSubscriber,
+    CompanyVerification, CompanyProfile, Complaint, Plan, Subscription,
+    Invoice, PaymentMethod,
+)
+from .permissions import IsAdminOrEmployer, IsEmployerOrAdmin, IsJobSeeker, IsAdminUserType
+from .utils import generate_otp, generate_4digit_otp, send_email_otp, generate_token, send_password_reset_email
+
+User = get_user_model()
 
 
- 
-from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework import status
-from django.utils import timezone
-from datetime import timedelta
- 
-from .serializers import JobSeekerRegistrationSerializer, EmployerRegistrationSerializer, UserReadSerializer
-from .models import EmailOTP
-from .utils import generate_otp, send_email_otp
- 
- 
+# ============ REGISTRATION VIEWS ============
+
 class JobSeekerRegistrationView(APIView):
     permission_classes = [AllowAny]
- 
+
     def post(self, request):
         email = request.data.get("email")
- 
-        # ✅ CHECK EMAIL VERIFIED
+
         email_verified = EmailOTP.objects.filter(
             email=email,
             purpose="email_verification",
             is_verified=True
         ).exists()
- 
+
         if not email_verified:
             return Response({"error": "Please verify your email first"}, status=400)
- 
+
         serializer = JobSeekerRegistrationSerializer(data=request.data)
- 
+
         if serializer.is_valid():
             user = serializer.save()
             user.is_active = True
             user.save()
- 
+
             return Response({
                 "message": "User registered successfully"
             }, status=201)
+        else:
+            return Response(serializer.errors, status=400)
  
-        return Response(serializer.errors, status=400)
- 
- 
+
 class EmployerRegistrationView(APIView):
     permission_classes = [AllowAny]
- 
+
     def post(self, request):
         print(f"Registration data received: {request.data}")
-       
-        # Get email from request
+        
         email = request.data.get("email")
-       
-        # Check if email is verified
+        
         email_verified = EmailOTP.objects.filter(
             email=email,
             purpose="email_verification",
             is_verified=True
         ).exists()
-       
+        
         if not email_verified:
             return Response(
-                {"error": "Please verify your email first"},
+                {"error": "Please verify your email first"}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
- 
+
         serializer = EmployerRegistrationSerializer(data=request.data)
- 
+
         if serializer.is_valid():
             user = serializer.save()
             user.is_active = True
             user.save()
- 
+
             print(f"User created: {user.email}, Type: {user.user_type}")
- 
+
             return Response({
                 "message": "User registered successfully",
                 "user": {
@@ -110,19 +142,19 @@ class EmployerRegistrationView(APIView):
                     "phone": user.phone
                 }
             }, status=status.HTTP_201_CREATED)
- 
+
         print(f"Registration errors: {serializer.errors}")
- 
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
- 
- 
-from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomTokenObtainPairSerializer
- 
+
+
+# ============ AUTHENTICATION VIEWS ============
+
 class LoginView(TokenObtainPairView):
     permission_classes = [AllowAny]
     serializer_class = CustomTokenObtainPairSerializer
  
+
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
  
@@ -137,53 +169,115 @@ class LogoutView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
  
- 
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import ValidationError
-from jobapp.models import JobSeekerProfile
-from jobapp.serializers import (
-    JobSeekerProfileReadSerializer,
-    JobSeekerProfileWriteSerializer
-)
- 
+
+# ============ PROFILE VIEWS ============
+
 class JobSeekerProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated]
- 
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
     def get_serializer_class(self):
         if self.request.method == 'GET':
             return JobSeekerProfileReadSerializer
         return JobSeekerProfileWriteSerializer
- 
+
     def get_object(self):
-        """
-        Safely get or create JobSeekerProfile.
-        NEVER use hasattr() for OneToOne fields.
-        """
- 
         profile, created = JobSeekerProfile.objects.get_or_create(
             user=self.request.user
         )
- 
-        # Optional: block employers explicitly
-        if not hasattr(self.request.user, 'jobseeker'):
-            # remove this if you don't have a separate role system
-            pass
- 
         return profile
- 
-from rest_framework import generics
-from .models import JobSeekerProfile
-from .serializers import JobSeekerProfileReadSerializer
-from .permissions import IsAdminOrEmployer
+
+    def update(self, request, *args, **kwargs):
+        print("\n" + "="*80)
+        print("🚀 JOBSEEKER PROFILE UPDATE - START")
+        print("="*80)
+
+        print(f"📌 User: {request.user.email} (ID: {request.user.id})")
+        print(f"📌 Method: {request.method}")
+        print(f"📌 Content-Type: {request.headers.get('Content-Type', 'Not specified')}")
+
+        content_type = request.headers.get('Content-Type', '')
+
+        if 'multipart/form-data' in content_type and 'data' in request.data:
+            try:
+                import json
+                json_data = json.loads(request.data.get('data'))
+                print("\n📦 Parsed JSON data from 'data' field:")
+                print(json.dumps(json_data, indent=2, default=str)[:1000])
+
+                combined_data = {}
+
+                # Add all JSON data
+                for key, value in json_data.items():
+                    combined_data[key] = value
+
+                # ✅ IMPORTANT: Check for delete_profile_photo flag in FormData
+                if 'delete_profile_photo' in request.data:
+                    combined_data['delete_profile_photo'] = request.data.get('delete_profile_photo') == 'true'
+                    print(f"📸 Found delete_profile_photo flag: {combined_data['delete_profile_photo']}")
+
+                # Add file data
+                for key, value in request.data.items():
+                    if key != 'data':
+                        combined_data[key] = value
+                
+                # Process certifications
+                certifications_list = []
+                
+                # First, get certifications from JSON data
+                if 'certifications' in json_data:
+                    certifications_list = json_data['certifications']
+                
+                # Then, check for files in FormData and merge with existing IDs
+                cert_index = 0
+                while f'certifications[{cert_index}][name]' in request.data:
+                    cert_name = request.data.get(f'certifications[{cert_index}][name]')
+                    cert_id = request.data.get(f'certifications[{cert_index}][id]')
+                    cert_file = request.FILES.get(f'certifications[{cert_index}][certificate_file]')
+                    
+                    if cert_index < len(certifications_list):
+                        if cert_id:
+                            certifications_list[cert_index]['id'] = int(cert_id)
+                        certifications_list[cert_index]['name'] = cert_name
+                        if cert_file:
+                            certifications_list[cert_index]['certificate_file'] = cert_file
+                    else:
+                        cert_dict = {'name': cert_name}
+                        if cert_id:
+                            cert_dict['id'] = int(cert_id)
+                        if cert_file:
+                            cert_dict['certificate_file'] = cert_file
+                        certifications_list.append(cert_dict)
+                    
+                    cert_index += 1
+                
+                if certifications_list:
+                    print("FINAL certifications_list:", certifications_list)
+                    combined_data['certifications'] = certifications_list
+                    print(f"\n📦 Processed {len(certifications_list)} certifications")
+                    for i, cert in enumerate(certifications_list):
+                        print(f"   Cert {i}: ID={cert.get('id')}, Name={cert.get('name')}, HasFile={bool(cert.get('certificate_file'))}")
+
+                # Replace request.data with our combined data
+                request._full_data = combined_data
+
+            except Exception as e:
+                print(f"Error parsing JSON data: {e}")
+                import traceback
+                traceback.print_exc()
+
+        print("\n" + "="*80)
+        print("🚀 CALLING SUPER().UPDATE()")
+        print("="*80 + "\n")
+
+        return super().update(request, *args, **kwargs)
 
 class JobSeekerListView(generics.ListAPIView):
     queryset = JobSeekerProfile.objects.all()
     serializer_class = JobSeekerProfileReadSerializer
     permission_classes = [IsAdminOrEmployer]
    
- 
- 
+
 class EmployerProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated]
  
@@ -197,162 +291,60 @@ class EmployerProfileView(generics.RetrieveUpdateAPIView):
             raise ValidationError("You are not an employer.")
         return self.request.user.employer_profile
    
- 
-   
-from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
-from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied, ValidationError
-from .models import Company, Job, JobApplication, SavedJob, Notification
-from .serializers import (
-    CompanySerializer, JobReadSerializer, JobWriteSerializer,
-    JobApplicationWriteSerializer, SavedJobSerializer,
-    JobApplicationEmployerSerializer, JobApplicationListSerializer ,JobUpdateSerializer
-)
- 
- 
- 
-# Company Views
- 
-class CompanyListView(generics.ListAPIView):
-    permission_classes = [AllowAny]
-    serializer_class = CompanySerializer
- 
-    def get_queryset(self):
-        # Public only sees active companies
-        return Company.objects.filter(is_active=True)
- 
- 
-class CompanyDetailView(generics.RetrieveAPIView):
-    permission_classes = [AllowAny]
-    serializer_class = CompanySerializer
-    queryset = Company.objects.filter(is_active=True)
- 
- 
-class CompanyCreateView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = CompanySerializer
- 
-    def perform_create(self, serializer):
-        if not hasattr(self.request.user, 'employer_profile'):
-            raise PermissionDenied("Only employers can create companies.")
-        company = serializer.save()
-        # Auto-link to employer profile
-        employer_profile = self.request.user.employer_profile
-        employer_profile.company = company
-        employer_profile.save()
- 
- 
-class CompanyLinkView(generics.UpdateAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = CompanySerializer
- 
-    def get_object(self):
-        if not hasattr(self.request.user, 'employer_profile'):
-            raise PermissionDenied("Only employers can link companies.")
-        return self.request.user.employer_profile
- 
-    def perform_update(self, serializer):
-        company_id = self.request.data.get('company_id')
-        if not company_id:
-            raise ValidationError({"company_id": "This field is required to link a company."})
- 
-        try:
-            company = Company.objects.get(id=company_id, is_active=True)
-        except Company.DoesNotExist:
-            raise ValidationError({"company_id": "Company not found or inactive."})
- 
-        serializer.instance.company = company
-        serializer.instance.save()
- 
- 
-# Employer can edit their own company details
- 
- 
-class CompanyEditView(generics.UpdateAPIView):
-    permission_classes = [IsAuthenticated]
-    serializer_class = CompanySerializer
- 
-    def get_queryset(self):
-        user = self.request.user
-        if not hasattr(user, 'employer_profile'):
-            return Company.objects.none()
-        # Only allow editing the company linked to this employer
-        employer_company = user.employer_profile.company
-        if not employer_company:
-            return Company.objects.none()
-        return Company.objects.filter(id=employer_company.id)
- 
-    def perform_update(self, serializer):
-        # Optional: extra permission check (already handled by queryset)
-        serializer.save()
- 
- 
-# Admin: Disable/Enable Company
-class AdminCompanyToggleActiveView(generics.UpdateAPIView):
-    permission_classes = [IsAdminUser]
-    serializer_class = CompanySerializer
-    queryset = Company.objects.all()
- 
-    def perform_update(self, serializer):
-        company = serializer.instance
-        company.is_active = not company.is_active
-        company.save()
-        serializer.save()
- 
- 
- 
-# Job Views
- 
-from rest_framework import generics
-from rest_framework.permissions import AllowAny
-from django.db.models import Q
-from .models import Job
-from .serializers import JobReadSerializer
- 
- 
+
+# ============ COMPANY VIEWS - REMOVED AND REPLACED WITH COMPANYPROFILE ============
+
+# REMOVED: CompanyListView, CompanyDetailView, CompanyCreateView, 
+# CompanyLinkView, CompanyEditView, AdminCompanyToggleActiveView
+
+# These have been replaced with CompanyProfile views at the bottom of the file
+
+
+# ============ JOB VIEWS ============
+
 class JobListView(generics.ListAPIView):
     permission_classes = [AllowAny]
-    serializer_class = JobReadSerializer
- 
+    
     def get_queryset(self):
-        queryset = Job.objects.filter(is_active=True)
- 
-        search = self.request.query_params.get("search")
-        location = self.request.query_params.get("location")
-        experience = self.request.query_params.get("experience")
-        company_id = self.request.query_params.get("company")
- 
+        return PostAJob.objects.filter(is_published=True)
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        
+        search = request.query_params.get("search")
+        location = request.query_params.get("location")
+        experience = request.query_params.get("experience")
+        company_id = request.query_params.get("company")
+        
         if company_id:
-            queryset = queryset.filter(company_id=company_id)
- 
+            # Changed to use CompanyProfile
+            queryset = queryset.filter(employer__employer_profile__company_id=company_id)
+        
         if search:
-            queryset = queryset.filter(
-                Q(title__icontains=search) |
-                Q(company__name__icontains=search)
-            )
- 
+            queryset = queryset.filter(job_title__icontains=search)
+        
         if location:
             queryset = queryset.filter(location__icontains=location)
- 
+        
         if experience:
-            queryset = queryset.filter(experience_required__icontains=experience)
+            queryset = queryset.filter(experience__icontains=experience)
+        
+        # Order by newest first
+        queryset = queryset.order_by('-created_at')
+        
+        serializer = PostAJobSerializer(queryset, many=True)
+        return Response(serializer.data)
  
-        return queryset
- 
- 
- 
- 
- 
+
 class JobDetailView(generics.RetrieveAPIView):
     permission_classes = [AllowAny]
-    serializer_class = JobReadSerializer
-    queryset = Job.objects.filter(is_active=True)
+    serializer_class = PostAJobSerializer
+    queryset = PostAJob.objects.filter(is_published=True)
  
- 
+
 class JobCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = JobWriteSerializer
+    serializer_class = PostAJobSerializer
  
     def perform_create(self, serializer):
         if not hasattr(self.request.user, 'employer_profile'):
@@ -360,54 +352,184 @@ class JobCreateView(generics.CreateAPIView):
         employer_profile = self.request.user.employer_profile
         if not employer_profile.company:
             raise PermissionDenied("You must link a company before posting jobs.")
-        serializer.save(posted_by=self.request.user, company=employer_profile.company)
+        serializer.save(employer=self.request.user, is_published=False)
  
- 
+
 class JobUpdateView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = JobUpdateSerializer
+    serializer_class = PostAJobSerializer
  
     def get_queryset(self):
-        return Job.objects.filter(posted_by=self.request.user)
+        return PostAJob.objects.filter(employer=self.request.user)
  
- 
+
 class JobDeleteView(generics.DestroyAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = JobReadSerializer
+    serializer_class = PostAJobSerializer
  
     def get_queryset(self):
-        return Job.objects.filter(posted_by=self.request.user)
+        return PostAJob.objects.filter(employer=self.request.user)
  
- 
+
 class JobToggleActiveView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = JobWriteSerializer
+    serializer_class = PostAJobSerializer
  
     def get_queryset(self):
-        return Job.objects.filter(posted_by=self.request.user)
+        return PostAJob.objects.filter(employer=self.request.user)
  
     def perform_update(self, serializer):
         job = serializer.instance
-        job.is_active = not job.is_active
+        job.is_published = not job.is_published
         job.save()
         serializer.save()
  
+
+# ============ POST A JOB VIEWS ============
+
+class CreateJobPreviewView(generics.CreateAPIView):
+    serializer_class = PostAJobSerializer
+    permission_classes = [IsAuthenticated]
  
-# Job Application & Saved Jobs
+    def create(self, request, *args, **kwargs):
+        print("=" * 50)
+        print("Received job data:", request.data)
+        print("=" * 50)
+        return super().create(request, *args, **kwargs)
  
-from rest_framework import generics, status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
+    def perform_create(self, serializer):
+        user = self.request.user
  
+        if user.user_type != "employer":
+            raise PermissionDenied("Only employers can post jobs")
  
-from .models import JobApplication, Notification
-from .serializers import (
-    JobApplicationWriteSerializer,
-    JobApplicationDetailSerializer
-)
+        if not hasattr(user, "employer_profile"):
+            raise PermissionDenied("Employer profile not found")
  
+        employer_profile = user.employer_profile
  
+        if not employer_profile.company:
+            raise PermissionDenied("You must link a company first")
+ 
+        verification = CompanyVerification.objects.filter(
+            employer=user,
+            status="approved"
+        ).exists()
+ 
+        if not verification:
+            raise PermissionDenied("Company must be verified before posting jobs")
+ 
+        serializer.save(
+            employer=user,
+            is_published=False
+        )
+   
+    def handle_exception(self, exc):
+        print(f"Exception occurred: {exc}")
+        return super().handle_exception(exc)
+ 
+
+class PreviewJobView(generics.RetrieveAPIView):
+    serializer_class = PostAJobSerializer
+    permission_classes = [IsAuthenticated]
+ 
+    def get_queryset(self):
+        return PostAJob.objects.filter(employer=self.request.user)
+ 
+
+class PublishJobView(APIView):
+    permission_classes = [IsAuthenticated]
+ 
+    def patch(self, request, pk):
+        if request.user.user_type != "employer":
+            raise PermissionDenied("Only employers can publish jobs")
+ 
+        job = get_object_or_404(
+            PostAJob,
+            id=pk,
+            employer=request.user
+        )
+ 
+        job.is_published = True
+        job.save()
+ 
+        return Response({
+            "message": "Job posted successfully",
+            "job_id": job.id,
+            "job_title": job.job_title
+        }, status=status.HTTP_200_OK)
+ 
+
+class UpdateJobView(generics.UpdateAPIView):
+    serializer_class = PostAJobSerializer
+    permission_classes = [IsAuthenticated]
+ 
+    def get_queryset(self):
+        return PostAJob.objects.filter(employer=self.request.user)
+   
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['partial'] = True
+        return context
+   
+    def patch(self, request, *args, **kwargs):
+        print("=" * 50)
+        print("PATCH request received for job update")
+        print("Request data:", request.data)
+        print("=" * 50)
+        return super().patch(request, *args, **kwargs)
+ 
+
+class DeleteJobView(generics.DestroyAPIView):
+    serializer_class = PostAJobSerializer
+    permission_classes = [IsAuthenticated]
+ 
+    def get_queryset(self):
+        return PostAJob.objects.filter(employer=self.request.user)
+ 
+
+class PostedJobListView(generics.ListAPIView):
+    queryset = PostAJob.objects.filter(is_published=True)
+    serializer_class = PostAJobSerializer
+ 
+
+class EmployerJobListView(generics.ListAPIView):
+    serializer_class = PostAJobSerializer
+    permission_classes = [IsAuthenticated]
+ 
+    def get_queryset(self):
+        return PostAJob.objects.filter(employer=self.request.user)
+
+
+class JobSeekerJobListView(generics.ListAPIView):
+    serializer_class = PostAJobSerializer
+    permission_classes = [IsAuthenticated]
+   
+    def get_queryset(self):
+        return PostAJob.objects.filter(
+            is_published=True
+        ).order_by('-created_at')
+   
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+       
+        return Response({
+            'total_jobs': queryset.count(),
+            'jobs': serializer.data
+        })
+
+
+class JobSeekerJobDetailView(generics.RetrieveAPIView):
+    serializer_class = PostAJobSerializer
+    permission_classes = [IsAuthenticated]
+   
+    def get_queryset(self):
+        return PostAJob.objects.filter(is_published=True)
+
+
+# ============ JOB APPLICATION & SAVED JOBS ============
+
 class ApplyJobView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = JobApplicationWriteSerializer
@@ -425,21 +547,19 @@ class ApplyJobView(generics.CreateAPIView):
  
         instance = serializer.save()
  
-        # Notify the employer
         job = instance.job
-        if job.posted_by and hasattr(job.posted_by, 'employer_profile'):
+        if job.employer and hasattr(job.employer, 'employer_profile'):
             Notification.objects.create(
-                user=job.posted_by,
-                message=f"New application received for '{job.title}' from {request.user.email}"
+                user=job.employer,
+                message=f"New application received for '{job.job_title}' from {request.user.email}"
             )
  
-        # Use the FULL detail serializer for response
         detail_serializer = JobApplicationDetailSerializer(instance)
         headers = self.get_success_headers(serializer.data)
        
         return Response(detail_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
  
- 
+
 class AppliedJobsListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = JobApplicationListSerializer
@@ -447,22 +567,10 @@ class AppliedJobsListView(generics.ListAPIView):
     def get_queryset(self):
         return JobApplication.objects.filter(user=self.request.user)
  
- 
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from django.db import IntegrityError
-from rest_framework.exceptions import ValidationError
- 
-from .models import SavedJob
-from .serializers import SavedJobSerializer
- 
- 
+
 class SaveJobView(APIView):
     permission_classes = [IsAuthenticated]
  
-    # SAVE JOB
     def post(self, request):
         serializer = SavedJobSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -477,7 +585,6 @@ class SaveJobView(APIView):
             status=status.HTTP_201_CREATED
         )
  
-    # REMOVE SAVED JOB
     def delete(self, request, job_id):
         deleted, _ = SavedJob.objects.filter(
             user=request.user,
@@ -492,11 +599,7 @@ class SaveJobView(APIView):
  
         return Response(status=status.HTTP_204_NO_CONTENT)
  
- 
- 
-from jobapp.models import SavedJob, JobApplication
- 
- 
+
 class SavedJobsListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = SavedJobSerializer
@@ -505,14 +608,14 @@ class SavedJobsListView(generics.ListAPIView):
         return (
             SavedJob.objects
             .filter(user=self.request.user)
-            .select_related("job", "job__company")
+            .select_related("job")
             .order_by("-saved_date")
         )
  
- 
+
 class WithdrawApplicationView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
-    serializer_class = JobApplicationDetailSerializer  # ← use full serializer
+    serializer_class = JobApplicationDetailSerializer
     queryset = JobApplication.objects.all()
  
     def get_queryset(self):
@@ -526,11 +629,19 @@ class WithdrawApplicationView(generics.UpdateAPIView):
         application.status = JobApplication.Status.WITHDRAWN
         application.save()
        
-        # Return full updated details
         return Response(JobApplicationDetailSerializer(application).data)
  
-# Employer: Applications for their jobs
+
+class JobApplicationDetailView(generics.RetrieveAPIView):
+    serializer_class = JobApplicationListSerializer
+    permission_classes = [IsAuthenticated]
  
+    def get_queryset(self):
+        return JobApplication.objects.filter(user=self.request.user)
+ 
+
+# ============ EMPLOYER APPLICATION VIEWS ============
+
 class EmployerApplicationsListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = JobApplicationEmployerSerializer
@@ -539,11 +650,10 @@ class EmployerApplicationsListView(generics.ListAPIView):
         user = self.request.user
         if not hasattr(user, 'employer_profile'):
             return JobApplication.objects.none()
-        # Jobs posted by this employer
-        jobs = Job.objects.filter(posted_by=user)
+        jobs = PostAJob.objects.filter(employer=user, is_published=True)
         return JobApplication.objects.filter(job__in=jobs)
    
-# Employer: Change application status
+
 class EmployerApplicationStatusUpdateView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = JobApplicationEmployerSerializer
@@ -553,46 +663,32 @@ class EmployerApplicationStatusUpdateView(generics.UpdateAPIView):
         if not hasattr(user, 'employer_profile'):
             return JobApplication.objects.none()
        
-        employer_company = user.employer_profile.company
-        if not employer_company:
-            return JobApplication.objects.none()
-       
-        # All applications for jobs in this company
-        jobs = Job.objects.filter(company=employer_company)
+        jobs = PostAJob.objects.filter(employer=user)
         return JobApplication.objects.filter(job__in=jobs)
  
     def perform_update(self, serializer):
         application = serializer.instance
-        old_status = application.status
-       
-        # Get new status from request data
         new_status = self.request.data.get('status')
+       
         if not new_status:
             raise ValidationError({"status": "This field is required to update status."})
        
         if new_status not in [choice[0] for choice in JobApplication.Status.choices]:
-            raise ValidationError({"status": f"Invalid status. Valid choices: {', '.join([c[0] for c in JobApplication.Status.choices])}"})
+            raise ValidationError({"status": f"Invalid status."})
        
-        # Prevent changing to same status (optional)
-        if new_status == old_status:
-            raise ValidationError({"status": "Application is already in this status."})
-       
-        # Update status
         application.status = new_status
         application.save()
  
-        # Create notification for jobseeker
         Notification.objects.create(
             user=application.user,
-            message=f"Your application for '{application.job.title}' has been updated to: {new_status.replace('_', ' ').title()}"
+            message=f"Your application for '{application.job.job_title}' has been updated to: {new_status.replace('_', ' ').title()}"
         )
  
-        # Return full updated application
         return Response(JobApplicationEmployerSerializer(application).data)
  
-# Notifications
- 
- 
+
+# ============ NOTIFICATION VIEWS ============
+
 class NotificationListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
@@ -600,7 +696,7 @@ class NotificationListView(generics.ListAPIView):
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user)
  
- 
+
 class MarkNotificationReadView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
@@ -613,6 +709,7 @@ class MarkNotificationReadView(generics.UpdateAPIView):
         serializer.instance.is_read = True
         serializer.instance.save()
        
+
 class MarkNotificationUnreadView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = NotificationSerializer
@@ -625,6 +722,7 @@ class MarkNotificationUnreadView(generics.UpdateAPIView):
         serializer.instance.is_read = False
         serializer.instance.save()
  
+
 class DeleteNotificationView(generics.DestroyAPIView):
     permission_classes = [IsAuthenticated]
     queryset = Notification.objects.all()
@@ -632,6 +730,7 @@ class DeleteNotificationView(generics.DestroyAPIView):
     def get_queryset(self):
         return Notification.objects.filter(user=self.request.user)
  
+
 class ClearAllNotificationsView(APIView):
     permission_classes = [IsAuthenticated]
  
@@ -639,14 +738,9 @@ class ClearAllNotificationsView(APIView):
         Notification.objects.filter(user=request.user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
  
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
- 
-from .models import UserSettings
-from .serializers import UserSettingsSerializer
- 
- 
+
+# ============ USER SETTINGS ============
+
 class UserSettingsView(APIView):
     permission_classes = [IsAuthenticated]
  
@@ -664,40 +758,10 @@ class UserSettingsView(APIView):
         serializer.save()
         return Response(serializer.data)
  
-from rest_framework.generics import RetrieveAPIView
-from .serializers import JobApplicationListSerializer
- 
- 
- 
-class JobApplicationDetailView(RetrieveAPIView):
-    serializer_class = JobApplicationListSerializer
-    permission_classes = [IsAuthenticated]
- 
-    def get_queryset(self):
-        return JobApplication.objects.filter(user=self.request.user)
- 
- 
- 
-from rest_framework.views import APIView
-from rest_framework import status, generics
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
-from .models import Conversation, Message
-from .serializers import (
-    ConversationSerializer,
-    MessageSerializer,
-    SendMessageSerializer,
-    ChatUserSerializer
-)
- 
-User = get_user_model()
- 
-# ============ CHAT CONVERSATIONS ============
- 
+
+# ============ CHAT VIEWS ============
+
 class ConversationListView(generics.ListAPIView):
-   
     permission_classes = [IsAuthenticated]
     serializer_class = ConversationSerializer
    
@@ -707,8 +771,8 @@ class ConversationListView(generics.ListAPIView):
     def get_serializer_context(self):
         return {'request': self.request}
  
+
 class ConversationDetailView(generics.RetrieveAPIView):
-   
     permission_classes = [IsAuthenticated]
     serializer_class = ConversationSerializer
    
@@ -718,13 +782,12 @@ class ConversationDetailView(generics.RetrieveAPIView):
     def get_serializer_context(self):
         return {'request': self.request}
  
+
 class ConversationMessagesView(APIView):
- 
     permission_classes = [IsAuthenticated]
    
     def get(self, request, pk):
         conversation = get_object_or_404(Conversation, pk=pk)
-       
        
         if request.user not in conversation.participants.all():
             return Response(
@@ -732,17 +795,16 @@ class ConversationMessagesView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
        
-        messages = conversation.messages.all()[:50]
+        messages = conversation.messages.all()
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
  
+
 class MarkConversationReadView(APIView):
-   
     permission_classes = [IsAuthenticated]
    
     def post(self, request, pk):
         conversation = get_object_or_404(Conversation, pk=pk)
-       
        
         if request.user not in conversation.participants.all():
             return Response(
@@ -757,10 +819,8 @@ class MarkConversationReadView(APIView):
        
         return Response({'status': 'conversation marked as read'})
  
-# ============ CHAT MESSAGES ============
- 
+
 class SendMessageView(APIView):
-   
     permission_classes = [IsAuthenticated]
    
     def post(self, request):
@@ -776,8 +836,8 @@ class SendMessageView(APIView):
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
  
+
 class UnreadCountView(APIView):
-   
     permission_classes = [IsAuthenticated]
    
     def get(self, request):
@@ -787,8 +847,8 @@ class UnreadCountView(APIView):
         ).count()
         return Response({'unread_count': count})
  
+
 class ConversationWithUserView(APIView):
-   
     permission_classes = [IsAuthenticated]
    
     def get(self, request):
@@ -807,7 +867,6 @@ class ConversationWithUserView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
        
-       
         conversation = Conversation.objects.filter(
             participants=request.user
         ).filter(
@@ -825,8 +884,8 @@ class ConversationWithUserView(APIView):
             'messages': MessageSerializer(messages, many=True).data
         })
  
+
 class MarkMessageReadView(APIView):
-   
     permission_classes = [IsAuthenticated]
    
     def post(self, request, pk):
@@ -842,23 +901,19 @@ class MarkMessageReadView(APIView):
         message.save()
         return Response({'status': 'message marked as read'})
  
-# ============ CHAT USERS ============
- 
+
 class ChatUsersView(generics.ListAPIView):
-   
     permission_classes = [IsAuthenticated]
     serializer_class = ChatUserSerializer
    
     def get_queryset(self):
-       
         return User.objects.exclude(id=self.request.user.id)
    
+
 class EmployerInitiateChatView(APIView):
-   
     permission_classes = [IsAuthenticated]
    
     def post(self, request):
-     
         if request.user.user_type != 'employer':
             return Response(
                 {'error': 'Only employers can initiate new conversations'},
@@ -882,7 +937,6 @@ class EmployerInitiateChatView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
        
- 
         conversation = Conversation.objects.filter(
             participants=request.user
         ).filter(
@@ -890,12 +944,10 @@ class EmployerInitiateChatView(APIView):
         ).first()
        
         if not conversation:
-           
             conversation = Conversation.objects.create(
                 initiated_by=request.user
             )
             conversation.participants.add(request.user, jobseeker)
-           
            
             if initial_message:
                 message = Message.objects.create(
@@ -915,16 +967,33 @@ class EmployerInitiateChatView(APIView):
             'conversation_id': conversation.id
         })    
    
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import ChatMessage
-from .serializers import ChatMessageSerializer
-import random
+
+@api_view(["POST"])
+def chat_api(request):
+    user_message = request.data.get("message")
  
+    if not user_message:
+        return Response({"error": "Message is required"}, status=400)
+ 
+    user_msg = ChatMessage.objects.create(
+        sender="user",
+        message=user_message
+    )
+ 
+    bot_reply_text = generate_bot_reply(user_message)
+ 
+    bot_msg = ChatMessage.objects.create(
+        sender="bot",
+        message=bot_reply_text
+    )
+ 
+    return Response({
+        "user": ChatMessageSerializer(user_msg).data,
+        "bot": ChatMessageSerializer(bot_msg).data
+    })
+
+
 def generate_bot_reply(user_text):
-    """
-    Enhanced rule-based bot with dynamic responses
-    """
     text = user_text.lower()
  
     login_responses = [
@@ -957,58 +1026,16 @@ def generate_bot_reply(user_text):
  
     if "login" in text:
         return random.choice(login_responses)
- 
     elif "job" in text:
         return random.choice(job_responses)
- 
     elif "register" in text:
         return random.choice(register_responses)
  
     return random.choice(default_responses)
- 
- 
-@api_view(["POST"])
-def chat_api(request):
-    user_message = request.data.get("message")
- 
-    if not user_message:
-        return Response({"error": "Message is required"}, status=400)
- 
-    # Save user message
-    user_msg = ChatMessage.objects.create(
-        sender="user",
-        message=user_message
-    )
- 
-    # Generate bot reply
-    bot_reply_text = generate_bot_reply(user_message)
- 
-    # Save bot reply
-    bot_msg = ChatMessage.objects.create(
-        sender="bot",
-        message=bot_reply_text
-    )
- 
-    return Response({
-        "user": ChatMessageSerializer(user_msg).data,
-        "bot": ChatMessageSerializer(bot_msg).data
-    })
- 
- 
- 
- 
- 
- 
-from rest_framework.views import APIView
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework import status
- 
-from .models import HelpTopic, RaiseTicket
-from .serializers import HelpTopicSerializer, RaiseTicketSerializer
- 
- 
-# Help Topics List API
+
+
+# ============ HELP & TICKET VIEWS ============
+
 @api_view(['GET'])
 def help_topics(request):
     topics = HelpTopic.objects.all().order_by('-id')
@@ -1019,18 +1046,14 @@ def help_topics(request):
         "data": serializer.data
     })
  
- 
-#  Raise Ticket Create API
+
 class RaiseTicketCreateView(APIView):
- 
- 
     def get(self, request):
         return Response({
             "status": True,
             "message": "Raise Ticket API Working"
         })
  
-    # Ticket Create
     def post(self, request):
         serializer = RaiseTicketSerializer(data=request.data)
  
@@ -1047,20 +1070,10 @@ class RaiseTicketCreateView(APIView):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
  
- 
-# Password
- 
-from django.utils import timezone
-from datetime import timedelta
-from .models import PasswordResetToken
-from .utils import generate_token, send_password_reset_email
-from .serializers import (
-    ForgotPasswordSerializer, ResetPasswordConfirmSerializer,
-    CreatePasswordSerializer
-)
- 
+
+# ============ PASSWORD MANAGEMENT ============
+
 class ForgotPasswordView(APIView):
- 
     permission_classes = [AllowAny]
  
     def post(self, request):
@@ -1091,9 +1104,8 @@ class ForgotPasswordView(APIView):
        
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
  
- 
+
 class ResetPasswordConfirmView(APIView):
- 
     permission_classes = [AllowAny]
  
     def post(self, request):
@@ -1133,9 +1145,8 @@ class ResetPasswordConfirmView(APIView):
        
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
  
- 
+
 class CreatePasswordView(APIView):
- 
     permission_classes = [AllowAny]
  
     def post(self, request):
@@ -1181,9 +1192,8 @@ class CreatePasswordView(APIView):
        
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
  
- 
+
 class ValidateResetTokenView(APIView):
- 
     permission_classes = [AllowAny]
  
     def post(self, request):
@@ -1215,9 +1225,8 @@ class ValidateResetTokenView(APIView):
                 "message": "Invalid token."
             }, status=status.HTTP_200_OK)
  
- 
+
 class AdminCreatePasswordTokenView(APIView):
- 
     permission_classes = [IsAdminUser]
  
     def post(self, request):
@@ -1253,8 +1262,9 @@ class AdminCreatePasswordTokenView(APIView):
                 "error": "User not found."
             }, status=status.HTTP_404_NOT_FOUND)    
        
-# Contact Us
- 
+
+# ============ CONTACT US ============
+
 class ContactMessageCreateAPIView(APIView):
     def post(self, request):
         serializer = ContactMessageSerializer(data=request.data)
@@ -1267,16 +1277,10 @@ class ContactMessageCreateAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                
 
-from rest_framework.response import Response
-from rest_framework import status
-from .models import NewsletterSubscriber
-from .serializers import NewsletterSubscriberSerializer
- 
- 
+# ============ NEWSLETTER ============
+
 class NewsletterSubscribeAPIView(APIView):
- 
     def post(self, request):
- 
         email = request.data.get("email")
         print(request.data)
  
@@ -1304,22 +1308,12 @@ class NewsletterSubscribeAPIView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# Company Verify
- 
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from .models import CompanyVerification
-from .serializers import CompanyVerificationSerializer
- 
- 
+# ============ COMPANY VERIFICATION ============
+
 class SubmitCompanyVerification(APIView):
- 
     permission_classes = [IsAuthenticated]
  
     def post(self, request):
- 
         if request.user.user_type != "employer":
             return Response(
                 {"error": "Only employers can submit company verification"},
@@ -1343,15 +1337,11 @@ class SubmitCompanyVerification(APIView):
  
         return Response(serializer.errors)
    
-from rest_framework.permissions import IsAdminUser
- 
- 
+
 class CompanyVerificationAction(APIView):
- 
     permission_classes = [IsAdminUser]
  
     def patch(self, request, pk):
- 
         try:
             verification = CompanyVerification.objects.get(id=pk)
         except CompanyVerification.DoesNotExist:
@@ -1367,175 +1357,15 @@ class CompanyVerificationAction(APIView):
  
         return Response({
             "message": f"Company {status_value} successfully"
-        })    
- 
-
-
- 
-# Post a Job
- 
-from rest_framework import generics, permissions
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from .models import PostAJob
-from .serializers import PostAJobSerializer
- 
-from .models import CompanyVerification
- 
-# Create Job (Preview Mode)
-from .models import CompanyVerification
-from rest_framework.exceptions import PermissionDenied
- 
-class CreateJobPreviewView(generics.CreateAPIView):
- 
-    serializer_class = PostAJobSerializer
-    permission_classes = [permissions.IsAuthenticated]
- 
-    def perform_create(self, serializer):
- 
-        user = self.request.user
- 
-        # 1 Check user type
-        if user.user_type != "employer":
-            raise PermissionDenied("Only employers can post jobs")
- 
-        # 2 Check employer profile
-        if not hasattr(user, "employer_profile"):
-            raise PermissionDenied("Employer profile not found")
- 
-        employer_profile = user.employer_profile
- 
-        # 3 Check company
-        if not employer_profile.company:
-            raise PermissionDenied("You must link a company first")
- 
-        # 4 Check company verification
-        verification = CompanyVerification.objects.filter(
-            employer=user,
-            status="approved"
-        ).exists()
- 
-        if not verification:
-            raise PermissionDenied("Company must be verified before posting jobs")
- 
-        serializer.save(
-            employer=user,
-            is_published=False
-        )
- 
-# Preview Job
-class PreviewJobView(generics.RetrieveAPIView):
-    serializer_class = PostAJobSerializer
-    permission_classes = [permissions.IsAuthenticated]
- 
-    def get_queryset(self):
-        return PostAJob.objects.filter(employer=self.request.user)
- 
-# Publish Job (Submit Job)
-from django.shortcuts import get_object_or_404
- 
-class PublishJobView(APIView):
- 
-    permission_classes = [permissions.IsAuthenticated]
- 
-    def patch(self, request, pk):
- 
-        if request.user.user_type != "employer":
-            raise PermissionDenied("Only employers can publish jobs")
- 
-        job = get_object_or_404(
-            PostAJob,
-            id=pk,
-            employer=request.user
-        )
- 
-        job.is_published = True
-        job.save()
- 
-        return Response({
-            "message": "Job posted successfully"
         })
- 
-# Edit Job
-class UpdateJobView(generics.UpdateAPIView):
- 
-    serializer_class = PostAJobSerializer
-    permission_classes = [permissions.IsAuthenticated]
- 
-    def get_queryset(self):
-        return PostAJob.objects.filter(employer=self.request.user)
- 
-# Delete Job
-class DeleteJobView(generics.DestroyAPIView):
- 
-    serializer_class = PostAJobSerializer
-    permission_classes = [permissions.IsAuthenticated]
- 
-    def get_queryset(self):
-        return PostAJob.objects.filter(employer=self.request.user)
- 
-# List All Posted Jobs
-class PostedJobListView(generics.ListAPIView):
-    queryset = PostAJob.objects.filter(is_published=True)
-    serializer_class = PostAJobSerializer
- 
- 
-
-# OTP
- 
-class VerifyEmailOTPView(APIView):
-    permission_classes = [AllowAny]
- 
-    def post(self, request):
- 
-        email = request.data.get("email")
-        otp = request.data.get("otp")
- 
-        try:
-            user = User.objects.get(email=email)
- 
-            otp_obj = EmailOTP.objects.filter(
-                user=user,
-                otp=otp,
-                is_verified=False
-            ).last()
- 
-            if not otp_obj or not otp_obj.is_valid():
-                return Response({"error": "Invalid or expired OTP"}, status=400)
- 
-            otp_obj.is_verified = True
-            otp_obj.save()
- 
-            user.is_active = True
-            user.save()
- 
-            return Response({
-                "message": "Email verified successfully"
-            })
- 
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)    
-        
 
 
- 
+# ============ COMPANY PROFILE VIEWS ============
 
- # About Company
- 
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from .models import CompanyProfile
-from .serializers import CompanyProfileSerializer
-from .permissions import IsEmployerOrAdmin
- 
-# CREATE
 class CompanyProfileCreateView(APIView):
     permission_classes = [IsEmployerOrAdmin]
  
     def post(self, request):
- 
         if CompanyProfile.objects.filter(user=request.user).exists():
             return Response({"error": "Profile already exists"}, status=400)
  
@@ -1548,25 +1378,27 @@ class CompanyProfileCreateView(APIView):
             serializer.save()
             return Response({"message": "Created successfully"})
  
-        return Response(serializer.errors, status=400) 
-        
-         
-    
+        return Response(serializer.errors, status=400)
  
- 
-# GET
+
 class CompanyProfileDetailView(APIView):
     permission_classes = [IsEmployerOrAdmin]
- 
+
     def get(self, request):
         try:
             profile = CompanyProfile.objects.get(user=request.user)
-            return Response(CompanyProfileSerializer(profile).data)
+
+            serializer = CompanyProfileSerializer(
+                profile,
+                context={'request': request}
+            )
+
+            return Response(serializer.data)
+
         except CompanyProfile.DoesNotExist:
             return Response({"error": "Not found"}, status=404)
  
- 
-# UPDATE
+
 class CompanyProfileUpdateView(APIView):
     permission_classes = [IsEmployerOrAdmin]
  
@@ -1589,12 +1421,96 @@ class CompanyProfileUpdateView(APIView):
                 "message": "Profile updated successfully",
                 "data": serializer.data
             }, status=200)
-       
+        
         return Response(serializer.errors, status=400)
     
-# OTP
+class CompanyProfileListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        companies = CompanyProfile.objects.all().order_by('-created_at')
+
+        serializer = CompanyProfileSerializer(
+            companies,
+            many=True,
+            context={'request': request}
+        )
+
+        return Response(serializer.data, status=200)
+
+class CompanyProfileByIdView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, company_id):
+        try:
+            company = CompanyProfile.objects.get(id=company_id)
+
+            serializer = CompanyProfileSerializer(
+                company,
+                context={'request': request}
+            )
+
+            return Response(serializer.data, status=200)
+
+        except CompanyProfile.DoesNotExist:
+            return Response(
+                {"error": "Company not found"},
+                status=404
+            )        
+    
+
+# ============ OTP VIEWS ============
 
 class SendEmailOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+
+        if not email:
+            return Response({"error": "Email is required"}, status=400)
+
+        if User.objects.filter(email=email).exists():
+            return Response({"error": "Email already registered"}, status=400)
+
+        otp = generate_otp()
+
+        EmailOTP.objects.create(
+            email=email,
+            otp=otp,
+            purpose="email_verification",
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+
+        send_email_otp(email, otp, "signup")
+
+        return Response({"message": "OTP sent to email"})
+
+
+class VerifyEmailOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get("email")
+        otp = request.data.get("otp")
+
+        otp_obj = EmailOTP.objects.filter(
+            email=email,
+            otp=otp,
+            purpose="email_verification",
+            is_verified=False
+        ).last()
+
+        if not otp_obj or not otp_obj.is_valid():
+            return Response({"error": "Invalid or expired OTP"}, status=400)
+
+        otp_obj.is_verified = True
+        otp_obj.save()
+
+        return Response({"message": "Email verified successfully"})
+
+
+class SendLoginOTPView(APIView):
     permission_classes = [AllowAny]
  
     def post(self, request):
@@ -1603,39 +1519,45 @@ class SendEmailOTPView(APIView):
         if not email:
             return Response({"error": "Email is required"}, status=400)
  
-        # ❌ prevent duplicate accounts
-        if User.objects.filter(email=email).exists():
-            return Response({"error": "Email already registered"}, status=400)
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"error": "User not found. Please sign up first."}, status=404)
  
-        otp = generate_otp()
+        EmailOTP.objects.filter(email=email, purpose="login").delete()
  
-        # Save OTP (NO USER YET)
+        otp = generate_4digit_otp()
+ 
         EmailOTP.objects.create(
-            email=email,   # ⚠️ make sure model supports this
+            email=email,
             otp=otp,
-            purpose="email_verification",
-            expires_at=timezone.now() + timedelta(minutes=10)
+            purpose="login",
+            expires_at=timezone.now() + timedelta(minutes=5)
         )
  
-        send_email_otp(email, otp, "signup")
+        send_email_otp(email, otp, "login")
  
-        return Response({"message": "OTP sent to email"})
+        print(f"🔐 Login OTP for {email}: {otp}")
  
+        return Response({"message": "OTP sent successfully"})
  
- 
- 
- 
-class VerifyEmailOTPView(APIView):
+
+class VerifyLoginOTPView(APIView):
     permission_classes = [AllowAny]
  
     def post(self, request):
         email = request.data.get("email")
         otp = request.data.get("otp")
  
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required"}, status=400)
+ 
+        if len(otp) != 4:
+            return Response({"error": "OTP must be 4 digits"}, status=400)
+ 
         otp_obj = EmailOTP.objects.filter(
             email=email,
             otp=otp,
-            purpose="email_verification",
+            purpose="login",
             is_verified=False
         ).last()
  
@@ -1645,22 +1567,24 @@ class VerifyEmailOTPView(APIView):
         otp_obj.is_verified = True
         otp_obj.save()
  
-        return Response({"message": "Email verified successfully"})
+        user = User.objects.get(email=email)
+        refresh = RefreshToken.for_user(user)
+ 
+        return Response({
+            "message": "Login successful",
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "user_type": user.user_type
+            }
+        })
  
 
-# Report A Job
- 
- 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from django.db.models import Q, Count
-from django.utils import timezone
-from .models import Complaint, Job
-from .serializers import ComplaintSerializer
-from .permissions import IsJobSeeker, IsAdminUserType
- 
+# ============ REPORT A JOB ============
+
 class SubmitComplaintView(APIView):
     permission_classes = [IsAuthenticated, IsJobSeeker]
  
@@ -1668,193 +1592,30 @@ class SubmitComplaintView(APIView):
         serializer = ComplaintSerializer(data=request.data, context={'request': request})
  
         if serializer.is_valid():
-            complaint = serializer.save(user=request.user)
-           
-            # Get employer info for response
-            employer_name = complaint.reported_job.company.name if complaint.reported_job and complaint.reported_job.company else "Unknown"
+            serializer.save(user=request.user)
  
             return Response(
-                {
-                    "message": "Complaint submitted successfully",
-                    "complaint_id": complaint.id,
-                    "reported_job": complaint.reported_job.title,
-                    "employer": employer_name,
-                    "status": complaint.get_status_display()
-                },
+                {"message": "Complaint submitted successfully"},
                 status=status.HTTP_201_CREATED
             )
  
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
  
- 
+
 class AdminComplaintListView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUserType]
  
     def get(self, request):
-        # Select related to optimize queries
-        complaints = Complaint.objects.select_related(
-            'user', 'reported_job', 'reported_job__company'
-        ).order_by('-created_at')
-       
-        # Apply filters
+        complaints = Complaint.objects.all().order_by('-created_at')
+ 
         status_filter = request.GET.get("status")
         if status_filter:
             complaints = complaints.filter(status=status_filter)
-       
-        # Filter by job ID
-        job_id = request.GET.get("job_id")
-        if job_id:
-            complaints = complaints.filter(reported_job_id=job_id)
-       
-        # Filter by company/employer ID
-        company_id = request.GET.get("company_id")
-        if company_id:
-            complaints = complaints.filter(reported_job__company_id=company_id)
-       
-        # Filter by company/employer name
-        company_name = request.GET.get("company_name")
-        if company_name:
-            complaints = complaints.filter(
-                Q(reported_job__company__name__icontains=company_name) |
-                Q(reported_employer_name__icontains=company_name)
-            )
-       
-        # Filter by reporter name
-        reporter_name = request.GET.get("reporter_name")
-        if reporter_name:
-            complaints = complaints.filter(
-                Q(first_name__icontains=reporter_name) |
-                Q(last_name__icontains=reporter_name)
-            )
-       
-        # Filter by date range
-        from_date = request.GET.get("from_date")
-        if from_date:
-            complaints = complaints.filter(created_at__gte=from_date)
-       
-        to_date = request.GET.get("to_date")
-        if to_date:
-            complaints = complaints.filter(created_at__lte=to_date)
-       
-        # Get summary statistics
-        summary = {
-            "total_complaints": complaints.count(),
-            "pending": complaints.filter(status='pending').count(),
-            "resolved": complaints.filter(status='resolved').count(),
-            "investigating": complaints.filter(status='investigating').count(),
-            "rejected": complaints.filter(status='rejected').count(),
-            "unique_jobs_reported": complaints.values('reported_job').distinct().count(),
-            "unique_companies_reported": complaints.values('reported_job__company').distinct().count(),
-            "reports_last_24h": complaints.filter(
-                created_at__gte=timezone.now() - timezone.timedelta(hours=24)
-            ).count(),
-        }
-       
-        # Get most reported companies
-        most_reported_companies = complaints.values(
-            'reported_job__company__id',
-            'reported_job__company__name',
-            'reported_employer_name'
-        ).annotate(
-            report_count=Count('id'),
-            unique_reporters=Count('user', distinct=True)
-        ).order_by('-report_count')[:10]
-       
+ 
         serializer = ComplaintSerializer(complaints, many=True)
-       
-        return Response({
-            "summary": summary,
-            "most_reported_companies": most_reported_companies,
-            "complaints": serializer.data
-        })
+        return Response(serializer.data)
  
- 
-class AdminCompanyComplaintsView(APIView):
-    """View all complaints for a specific company/employer"""
-    permission_classes = [IsAuthenticated, IsAdminUserType]
-   
-    def get(self, request, company_id):
-        complaints = Complaint.objects.filter(
-            reported_job__company_id=company_id
-        ).select_related('user', 'reported_job').order_by('-created_at')
-       
-        if not complaints.exists():
-            return Response({
-                "message": "No complaints found for this company",
-                "company_id": company_id
-            }, status=200)
-       
-        # Get company info
-        company = complaints.first().reported_job.company
-       
-        # Get statistics for this company
-        stats = {
-            "total_complaints": complaints.count(),
-            "pending": complaints.filter(status='pending').count(),
-            "resolved": complaints.filter(status='resolved').count(),
-            "unique_jobs_reported": complaints.values('reported_job').distinct().count(),
-            "unique_reporters": complaints.values('user').distinct().count(),
-            "most_common_reason": complaints.values('reason').annotate(
-                count=Count('id')
-            ).order_by('-count').first()
-        }
-       
-        serializer = ComplaintSerializer(complaints, many=True)
-       
-        return Response({
-            "company": {
-                "id": company.id,
-                "name": company.name,
-                "website": company.website,
-                "is_verified": company.is_verified
-            },
-            "stats": stats,
-            "complaints": serializer.data
-        })
- 
- 
-class AdminUserComplaintsView(APIView):
-    """View all complaints by a specific user"""
-    permission_classes = [IsAuthenticated, IsAdminUserType]
-   
-    def get(self, request, user_id):
-        complaints = Complaint.objects.filter(
-            user_id=user_id
-        ).select_related('reported_job', 'reported_job__company').order_by('-created_at')
-       
-        if not complaints.exists():
-            return Response({
-                "message": "No complaints found for this user",
-                "user_id": user_id
-            }, status=200)
-       
-        # Get user info
-        user = complaints.first().user
-       
-        # Get statistics for this user
-        stats = {
-            "total_complaints": complaints.count(),
-            "pending": complaints.filter(status='pending').count(),
-            "resolved": complaints.filter(status='resolved').count(),
-            "unique_jobs_reported": complaints.values('reported_job').distinct().count(),
-            "unique_companies_reported": complaints.values('reported_job__company').distinct().count(),
-            "last_report_date": complaints.first().created_at if complaints.exists() else None
-        }
-       
-        serializer = ComplaintSerializer(complaints, many=True)
-       
-        return Response({
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "username": user.username,
-                "user_type": user.user_type
-            },
-            "stats": stats,
-            "complaints": serializer.data
-        })
- 
- 
+
 class AdminUpdateComplaintView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUserType]
  
@@ -1862,165 +1623,180 @@ class AdminUpdateComplaintView(APIView):
         try:
             complaint = Complaint.objects.get(id=pk)
         except Complaint.DoesNotExist:
-            return Response({"error": "Complaint not found"}, status=404)
-       
-        # Update status
-        new_status = request.data.get("status")
-        if new_status:
-            complaint.status = new_status
-           
-            # If resolved, set resolved_at and resolved_by
-            if new_status == 'resolved' and not complaint.resolved_at:
-                complaint.resolved_at = timezone.now()
-                complaint.resolved_by = request.user
-       
-        # Update admin notes if provided
-        admin_notes = request.data.get("admin_notes")
-        if admin_notes:
-            complaint.admin_notes = admin_notes
-       
+            return Response({"error": "Not found"}, status=404)
+ 
+        complaint.status = request.data.get("status", complaint.status)
         complaint.save()
-       
-        # Get employer name for response
-        employer_name = complaint.reported_job.company.name if complaint.reported_job and complaint.reported_job.company else "Unknown"
  
-        return Response({
-            "message": "Complaint updated successfully",
-            "complaint_id": complaint.id,
-            "status": complaint.get_status_display(),
-            "reported_job": complaint.reported_job.title if complaint.reported_job else None,
-            "employer": employer_name
-        })
- 
- 
-class CheckJobReportStatusView(APIView):
-    """Check if the current user has already reported a specific job"""
-    permission_classes = [IsAuthenticated]
-   
-    def get(self, request, job_id):
-        try:
-            # Check if job exists
-            job = Job.objects.get(id=job_id)
-        except Job.DoesNotExist:
-            return Response({"error": "Job not found"}, status=404)
-       
-        # Check if user has reported this specific job
-        complaint = Complaint.objects.filter(
-            user=request.user,
-            reported_job_id=job_id
-        ).first()
-       
-        if complaint:
-            return Response({
-                "has_reported": True,
-                "complaint_id": complaint.id,
-                "status": complaint.status,
-                "status_display": complaint.get_status_display(),
-                "reported_at": complaint.created_at,
-                "reason": complaint.reason
-            })
-       
-        return Response({
-            "has_reported": False,
-            "message": "You have not reported this job"
-        })
- 
- 
-class UserReportHistoryView(APIView):
-    """Get all reports made by the current user"""
-    permission_classes = [IsAuthenticated]
-   
-    def get(self, request):
-        complaints = Complaint.objects.filter(
-            user=request.user
-        ).select_related('reported_job', 'reported_job__company').order_by('-created_at')
-       
-        # Get statistics
-        stats = {
-            "total_reports": complaints.count(),
-            "pending": complaints.filter(status='pending').count(),
-            "resolved": complaints.filter(status='resolved').count(),
-            "investigating": complaints.filter(status='investigating').count(),
-            "rejected": complaints.filter(status='rejected').count(),
-            "unique_companies_reported": complaints.values('reported_job__company').distinct().count(),
-            "reports_last_30_days": complaints.filter(
-                created_at__gte=timezone.now() - timezone.timedelta(days=30)
-            ).count()
-        }
-       
-        serializer = ComplaintSerializer(complaints, many=True)
-       
-        return Response({
-            "stats": stats,
-            "complaints": serializer.data
-        })
- 
- 
- 
+        return Response({"message": "Status updated"})
+    
+# ============ BILLING VIEWS ============
 
-# About Company
- 
+from rest_framework.permissions import IsAuthenticated
+from django.http import FileResponse
+from .models import *
+from .serializers import *
+from .services import create_order
+from .utils import calculate_gst, generate_invoice_number, generate_invoice_pdf
+
+class PlanListView(APIView):
+    def get(self, request):
+        return Response(PlanSerializer(Plan.objects.all(), many=True).data)
+
+
+class CreateOrderView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        plan_id = request.data.get("plan_id")
+        plan = get_object_or_404(Plan, id=plan_id)
+
+        order = client.order.create({
+            "amount": int(plan.price * 100),
+            "currency": "INR",
+            "payment_capture": 1
+        })
+
+        payment = Payment.objects.create(
+            user=request.user,
+            plan=plan,
+            razorpay_order_id=order["id"],
+            amount=plan.price,
+            status="pending"
+        )
+
+        return Response({
+            "order_id": order["id"],
+            "amount": order["amount"],
+            "currency": order["currency"],
+            "payment_db_id": payment.id,
+            "razorpay_key": settings.RAZORPAY_KEY
+        })
+
+
+class CurrentSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        sub = Subscription.objects.filter(user=request.user, status='active').first()
+        return Response(SubscriptionSerializer(sub).data if sub else {})
+
+
+class CancelSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        sub = Subscription.objects.filter(user=request.user, status='active').first()
+        if sub:
+            sub.status = "cancelled"
+            sub.save()
+        return Response({"message": "Cancelled"})
+
+
+class InvoiceListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        invoices = Invoice.objects.filter(user=request.user)
+        return Response(InvoiceSerializer(invoices, many=True).data)
+
+
+class InvoiceDownloadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        invoice = Invoice.objects.get(id=pk, user=request.user)
+        file_path = generate_invoice_pdf(invoice)
+        return FileResponse(open(file_path, 'rb'), content_type='application/pdf')
+
+
+class PaymentMethodView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(PaymentMethodSerializer(
+            PaymentMethod.objects.filter(user=request.user), many=True).data)
+
+    def post(self, request):
+        serializer = PaymentMethodSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response(serializer.data)
+        return Response(serializer.errors)
+
+
+class DeletePaymentMethodView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        PaymentMethod.objects.filter(id=pk, user=request.user).delete()
+        return Response({"message": "Deleted"}) 
+
+# ============ PAYMENT VERIFICATION VIEW ============
+
+# jobapp/views.py
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
-from .models import CompanyProfile
-from .serializers import CompanyProfileSerializer
-from .permissions import IsEmployerOrAdmin
- 
-# ✅ CREATE
-class CompanyProfileCreateView(APIView):
-    permission_classes = [IsEmployerOrAdmin]
- 
+from decimal import Decimal
+
+# Import your models
+from jobapp.models import Payment, Subscription, Invoice
+
+# Import utility functions - CHOOSE THE CORRECT ONE:
+try:
+    # Option 1: If functions are in utils.py
+    from jobapp.utils import calculate_gst, generate_invoice_number, generate_invoice_pdf
+except ImportError:
+    # Option 2: If functions are in the same file (views.py)
+    from jobapp.views import calculate_gst, generate_invoice_number, generate_invoice_pdf
+
+class VerifyPaymentView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
- 
-        if CompanyProfile.objects.filter(user=request.user).exists():
-            return Response({"error": "Profile already exists"}, status=400)
- 
-        serializer = CompanyProfileSerializer(
-            data=request.data,
-            context={'request': request}
+        data = request.data
+
+        params_dict = {
+            'razorpay_order_id': data['razorpay_order_id'],
+            'razorpay_payment_id': data['razorpay_payment_id'],
+            'razorpay_signature': data['razorpay_signature']
+        }
+
+        client.utility.verify_payment_signature(params_dict)
+
+        payment = Payment.objects.get(
+            razorpay_order_id=data['razorpay_order_id']
         )
- 
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Created successfully"})
- 
-        return Response(serializer.errors, status=400)
- 
- 
-# ✅ GET
-class CompanyProfileDetailView(APIView):
-    permission_classes = [IsEmployerOrAdmin]
- 
-    def get(self, request):
-        try:
-            profile = CompanyProfile.objects.get(user=request.user)
-            return Response(CompanyProfileSerializer(profile).data)
-        except CompanyProfile.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
- 
- 
-# ✅ UPDATE
-class CompanyProfileUpdateView(APIView):
-    permission_classes = [IsEmployerOrAdmin]
- 
-    def patch(self, request):
-        try:
-            profile = CompanyProfile.objects.get(user=request.user)
-        except CompanyProfile.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
- 
-        serializer = CompanyProfileSerializer(
-            profile,
-            data=request.data,
-            partial=True,
-            context={'request': request}
+
+        payment.razorpay_payment_id = data['razorpay_payment_id']
+        payment.razorpay_signature = data['razorpay_signature']
+        payment.status = "success"
+        payment.save()
+
+        Subscription.objects.filter(
+            user=request.user,
+            status='active'
+        ).update(status='cancelled')
+
+        subscription = Subscription.objects.create(
+            user=request.user,
+            plan=payment.plan
         )
- 
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Updated successfully"})
- 
-        return Response(serializer.errors, status=400)
- 
+
+        gst, total = calculate_gst(payment.amount)
+
+        Invoice.objects.create(
+            user=request.user,
+            invoice_number=generate_invoice_number(),
+            transaction_id=payment.razorpay_payment_id,
+            subtotal=payment.amount,
+            gst=gst,
+            total=total,
+            payment_status="Paid",
+            plan_name=payment.plan.name,
+            start_date=subscription.start_date,
+            end_date=subscription.end_date
+        )
+
+        return Response({"message": "Payment verified successfully"})

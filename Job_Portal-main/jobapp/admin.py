@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.contrib.sessions.models import Session
+from django.utils import timezone
+from django.contrib.auth import get_user_model
 from .models import (
     AdminProfile,
     Complaint,
@@ -7,9 +10,9 @@ from .models import (
     Skill,
     LanguageKnown,
     Certification,
-    Company,
+    # REMOVED: Company,
     EmployerProfile,
-    Job,
+    PostAJob,
     JobApplication,
     SavedJob,
     NewsletterSubscriber,
@@ -21,9 +24,13 @@ from .models import (
     RaiseTicket,
     ContactMessage,
     CompanyVerification,
-    PostAJob
-    
+    JobSeekerProfile,
+    User,
+    CompanyProfile
 )
+
+User = get_user_model()
+
 
 # -------------------------
 # INLINE CONFIGURATION
@@ -55,16 +62,11 @@ class CertificationInline(admin.TabularInline):
 
 
 # -------------------------
-# COMPANY ADMIN
+# COMPANY ADMIN - REMOVED
 # -------------------------
 
-@admin.register(Company)
-class CompanyAdmin(admin.ModelAdmin):
-    list_display = ("custom_id", "name", "industry", "is_active", "created_at")
-    search_fields = ("name", "industry")
-    list_filter = ("is_active", "industry")
-    readonly_fields = ("created_at", "updated_at")
-    ordering = ("-created_at",)
+# REMOVED: @admin.register(Company)
+# REMOVED: class CompanyAdmin(admin.ModelAdmin)
 
 
 # -------------------------
@@ -89,37 +91,38 @@ class AdminProfileAdmin(admin.ModelAdmin):
 
 
 # -------------------------
-# JOB ADMIN
+# JOB ADMIN (UPDATED TO POSTAJOB)
 # -------------------------
 
-@admin.register(Job)
-class JobAdmin(admin.ModelAdmin):
-    list_display = ("title", "company", "location", "job_type", "is_active", "posted_date")
-    list_filter = ("job_type", "work_type", "is_active")
-    search_fields = ("title", "company__name")
-    readonly_fields = ("applicants_count",)
+@admin.register(PostAJob)
+class PostAJobAdmin(admin.ModelAdmin):
+    list_display = ("job_title", "employer", "location", "work_type", "is_published", "created_at", "job_status")
+    list_filter = ("work_type", "shift", "is_published", "job_status", "created_at")
+    search_fields = ("job_title", "employer__email", "location")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)
 
 
 # -------------------------
-# JOB APPLICATION ADMIN
+# JOB APPLICATION ADMIN (UPDATED)
 # -------------------------
 
 @admin.register(JobApplication)
 class JobApplicationAdmin(admin.ModelAdmin):
     list_display = ("user", "job", "status", "applied_date")
     list_filter = ("status",)
-    search_fields = ("user__email", "job__title")
+    search_fields = ("user__email", "job__job_title")
     readonly_fields = ("applied_date",)
 
 
 # -------------------------
-# SAVED JOBS
+# SAVED JOBS (UPDATED)
 # -------------------------
 
 @admin.register(SavedJob)
 class SavedJobAdmin(admin.ModelAdmin):
     list_display = ("user", "job", "saved_date")
-    search_fields = ("user__email", "job__title")
+    search_fields = ("user__email", "job__job_title")
 
 
 # -------------------------
@@ -185,14 +188,9 @@ class RaiseTicketAdmin(admin.ModelAdmin):
     ordering = ("-created_at",)
 
 
-
-from django.contrib import admin
-from django.contrib.sessions.models import Session
-from django.utils import timezone
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-
+# -------------------------
+# SESSIONS
+# -------------------------
 
 class ActiveUserAdmin(admin.ModelAdmin):
     list_display = ('user', 'email', 'session_key', 'expire_date')
@@ -220,31 +218,33 @@ class ActiveUserAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Session, ActiveUserAdmin)
- 
+
+
+# -------------------------
+# CONTACT MESSAGE ADMIN
+# -------------------------
+
 @admin.register(ContactMessage)
 class ContactMessageAdmin(admin.ModelAdmin):
-    list_display = ("name", "email", "contact","message", "created_at")
+    list_display = ("name", "email", "contact", "message", "created_at")
     search_fields = ("name", "email", "contact")
     readonly_fields = ("created_at",)
     ordering = ("-created_at",)
 
+
+# -------------------------
+# COMPANY VERIFICATION ADMIN
+# -------------------------
+
 @admin.register(CompanyVerification)
 class CompanyVerificationAdmin(admin.ModelAdmin):
- 
-    list_display = ("legal_name","official_email","phone_number","status","created_at")
+    list_display = ("legal_name", "official_email", "phone_number", "status", "created_at")
     list_filter = ("status",)
 
-@admin.register(PostAJob)
-class PostAJobAdmin(admin.ModelAdmin):
-    list_display = (
-        'job_title',
-        'location',
-        'salary',
-        'created_at'
-    )
-from django.contrib.auth import get_user_model
 
-User = get_user_model()
+# -------------------------
+# USER ADMIN
+# -------------------------
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -258,12 +258,16 @@ class UserAdmin(admin.ModelAdmin):
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
         ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
-from .models import JobSeekerProfile  # Add this import if not already present
+
+
+# -------------------------
+# JOB SEEKER PROFILE ADMIN
+# -------------------------
 
 @admin.register(JobSeekerProfile)
 class JobSeekerProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'full_name', 'current_job_title', 'current_location', 'total_experience_years')
-    search_fields = ('user__email', 'full_name', 'phone')  # phone? Actually JobSeekerProfile has no direct phone field; it has alternate_phone, and user model has phone. We can use user__phone.
+    search_fields = ('user__email', 'full_name', 'user__phone')
     list_filter = ('gender', 'current_location')
     readonly_fields = ('created_at', 'updated_at')
     fieldsets = (
@@ -283,15 +287,13 @@ class JobSeekerProfileAdmin(admin.ModelAdmin):
         CertificationInline
     ]
 
-# About Company
- 
-from django.contrib import admin
-from .models import CompanyProfile
- 
- 
+
+# -------------------------
+# COMPANY PROFILE ADMIN
+# -------------------------
+
 @admin.register(CompanyProfile)
 class CompanyProfileAdmin(admin.ModelAdmin):
- 
     list_display = (
         'company_name',
         'user',
@@ -300,65 +302,61 @@ class CompanyProfileAdmin(admin.ModelAdmin):
         'company_size',
         'created_at'
     )
- 
     search_fields = (
         'company_name',
         'contact_person',
         'company_email'
     )
- 
     list_filter = ('company_size', 'created_at')
- 
-    readonly_fields = ('created_at',)   
+    readonly_fields = ('created_at',)
     
-     
-from django.contrib import admin
-from django.urls import reverse
-from django.utils.html import format_html
-from django.utils import timezone
-from .models import Complaint
- 
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('user', 'company_name', 'company_moto', 'company_logo')
+        }),
+        ('Contact Information', {
+            'fields': ('contact_person', 'contact_number', 'company_email', 'website')
+        }),
+        ('Address', {
+            'fields': ('address1', 'address2')
+        }),
+        ('Company Details', {
+            'fields': ('company_size', 'about')
+        }),
+        ('Meta', {
+            'fields': ('created_at',)
+        }),
+    )
+
+
+# -------------------------
+# COMPLAINT ADMIN
+# -------------------------
+
 @admin.register(Complaint)
 class ComplaintAdmin(admin.ModelAdmin):
-   
     list_display = (
-        'id',
         'full_name',
         'email',
         'mobile',
-        'reported_job_title',
-        'reported_employer_name',
         'reason',
         'status',
         'created_at'
     )
-   
     list_filter = ('status', 'created_at')
-   
     search_fields = (
         'first_name',
         'last_name',
         'email',
         'mobile',
-        'reason',
-        'explanation',
-        'reported_job_title',
-        'reported_employer_name'
+        'reason'
     )
-   
     ordering = ('-created_at',)
-   
-    readonly_fields = ('created_at', 'updated_at', 'user')
-   
+    readonly_fields = ('created_at', 'user')
     list_per_page = 20
-   
+
     def full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}"
-    full_name.short_description = 'Reporter'
-   
-    def save_model(self, request, obj, form, change):
-        if obj.status == 'resolved' and not obj.resolved_at:
-            obj.resolved_at = timezone.now()
-            obj.resolved_by = request.user
-        super().save_model(request, obj, form, change)
- 
+
+    full_name.short_description = "Full Name"
+    full_name.admin_order_field = 'first_name'

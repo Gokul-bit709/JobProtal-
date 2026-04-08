@@ -6,89 +6,106 @@ from django.utils import timezone
 from .models import (
       User, JobSeekerProfile, EmployerProfile, AdminProfile,
     EducationEntry, WorkExperienceEntry, Skill, LanguageKnown, Certification,
-    Company, Job, JobApplication, SavedJob,
-    NewsletterSubscriber, Notification, Conversation, Message,ContactMessage,CompanyVerification,PostAJob,Complaint,
+    PostAJob, JobApplication, SavedJob,
+    NewsletterSubscriber, Notification, Conversation, Message, ContactMessage, 
+    CompanyVerification, Complaint, CompanyProfile, UserSettings, 
+    HelpTopic, RaiseTicket, PasswordResetToken, EmailOTP, ChatMessage, Plan, Subscription,
+    Invoice, PaymentMethod,
 )
  
 User = get_user_model()
- 
-# serializers.py
+
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from django.contrib.auth import authenticate
-from .models import User
-from . import models
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework import serializers
 from django.db.models import Q
- 
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    default_error_messages = {
-        'no_active_account': 'No active account found with the given credentials'
-    }
- 
+    """
+    Custom serializer that accepts BOTH username and email
+    No field validation - accepts any string for username/email
+    """
+    
+    # ✅ CRITICAL: Override fields to remove EmailField validation
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-       
-        self.fields['email'] = serializers.CharField(required=False)
-        self.fields['username'] = serializers.CharField(required=False)
- 
+        
+        # Remove default fields and add custom ones
+        self.fields.clear()
+        self.fields['username'] = serializers.CharField(required=False, allow_blank=True, write_only=True)
+        self.fields['email'] = serializers.CharField(required=False, allow_blank=True, write_only=True)
+        self.fields['password'] = serializers.CharField(write_only=True, required=True)
+
     def validate(self, attrs):
-       
+        # Get login value - try both fields
         login_value = attrs.get('username') or attrs.get('email')
         password = attrs.get('password')
- 
+
+        print(f"🔍 Login attempt with: '{login_value}'")
+        print(f"🔍 Received attrs: {attrs}")
+
         if not login_value:
-            raise serializers.ValidationError(
-                {"detail": "Must provide either 'username' or 'email'."}
-            )
- 
+            raise serializers.ValidationError({
+                "detail": ["Username or Email is required"]
+            })
+
         if not password:
-            raise serializers.ValidationError(
-                {"detail": "Password is required."}
+            raise serializers.ValidationError({
+                "detail": ["Password is required"]
+            })
+
+        # ✅ Find user by username OR email
+        user = None
+        
+        # Try to find by exact match first
+        try:
+            user = User.objects.get(
+                Q(username__iexact=login_value) | Q(email__iexact=login_value)
             )
- 
-       
-        user = authenticate(
-            request=self.context.get('request'),
-            username=login_value,
-            password=password
-        )
- 
-        if user is None:
-           
-            exists = User.objects.filter(
-                Q(email__iexact=login_value) | Q(username__iexact=login_value)
-            ).exists()
- 
-            if not exists:
-                raise serializers.ValidationError({
-                    "detail": "No account found with this email or username."
-                })
-            else:
-                raise serializers.ValidationError({
-                    "detail": "Incorrect password."
-                })
- 
+            print(f"📊 User found via direct lookup: {user.username}")
+        except User.DoesNotExist:
+            print(f"❌ No user found for: {login_value}")
+            raise serializers.ValidationError({
+                "detail": ["No account found with this email or username."]
+            })
+        except User.MultipleObjectsReturned:
+            print(f"⚠️ Multiple users found, taking first")
+            user = User.objects.filter(
+                Q(username__iexact=login_value) | Q(email__iexact=login_value)
+            ).first()
+
+        # ✅ Check password
+        if not user.check_password(password):
+            print(f"❌ Password check failed for: {user.username}")
+            raise serializers.ValidationError({
+                "detail": ["Incorrect password."]
+            })
+
         if not user.is_active:
             raise serializers.ValidationError({
-                "detail": "Account inactive"
+                "detail": ["This account is inactive."]
             })
- 
-       
-        attrs['username'] = user.username
-       
-       
-        data = super().validate(attrs)
-       
-       
-        data['user'] = {
-            'id': user.id,
-            'email': user.email,
-            'username': user.username,
-            'user_type': user.user_type,  
-            'phone': user.phone,
-            'is_online': user.is_online
+
+        print(f"✅ Login successful for: {user.username}")
+
+        # ✅ Generate tokens
+        refresh = RefreshToken.for_user(user)
+
+        return {
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+                'user_type': user.user_type,
+                'phone': user.phone,
+                'is_online': user.is_online
+            }
         }
-       
-        return data
  
  
 # User Serializers
@@ -117,18 +134,21 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
  
     def create(self, validated_data):
         validated_data.pop('password_confirm')
-        # If user_type is not set, default to None (will be set by specific serializers)
-        user_type = validated_data.get('user_type', None)
-        user = User.objects.create_user(
+        password = validated_data.pop('password')
+       
+        user = User(
             username=validated_data['username'],
             email=validated_data['email'],
-            password=validated_data['password'],
             phone=validated_data.get('phone', ''),
-            user_type=user_type  # This will be set by Employer/JobSeeker serializers
         )
-
-        user.is_active = False    
+       
+        if 'user_type' in validated_data:
+            user.user_type = validated_data['user_type']
+       
+        user.set_password(password)
+        user.is_active = False
         user.save()
+       
         return user
  
  
@@ -143,33 +163,30 @@ class JobSeekerRegistrationSerializer(UserRegistrationSerializer):
         return user
  
  
-# Employer Registration
 class EmployerRegistrationSerializer(UserRegistrationSerializer):
     class Meta(UserRegistrationSerializer.Meta):
         fields = UserRegistrationSerializer.Meta.fields
  
     def validate(self, data):
-        # Call parent validation
         validated_data = super().validate(data)
         return validated_data
  
     def create(self, validated_data):
-        # Explicitly set user_type
         validated_data['user_type'] = User.UserType.EMPLOYER
-        # Remove password_confirm if it exists
+
         if 'password_confirm' in validated_data:
             validated_data.pop('password_confirm')
-        # Create user with proper user_type
+
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
             password=validated_data['password'],
             phone=validated_data.get('phone', ''),
-            user_type=User.UserType.EMPLOYER  # Explicitly set here too
+            user_type=User.UserType.EMPLOYER
         )
+
         user.is_active = False    
         user.save()
-        # Create employer profile
         EmployerProfile.objects.create(user=user)
         return user
  
@@ -192,22 +209,9 @@ class EducationEntrySerializer(serializers.ModelSerializer):
         if level in ['SSLC', 'HSC', 'Diploma']:
             if not data.get('completion_year'):
                 errors['completion_year'] = "Year of completion is required for this level."
-            if data.get('start_year') or data.get('end_year'):
-                errors['start_year'] = "Start/end year not allowed for SSLC/HSC/Diploma."
- 
-        if level in ['Graduation', 'Post-Graduation', 'Doctorate']:
-            if not data.get('start_year'):
-                errors['start_year'] = "Start year is required for Graduation+ levels."
-            if not data.get('end_year'):
-                errors['end_year'] = "End year is required for Graduation+ levels."
-            if data.get('completion_year'):
-                errors['completion_year'] = "Completion year not allowed for Graduation+ levels."
  
         if level == 'HSC' and not data.get('post_10th_study'):
             errors['post_10th_study'] = "Please select what you studied after 10th."
- 
-        if level in ['Graduation', 'Post-Graduation'] and not data.get('degree'):
-            errors['degree'] = "Degree is required for Graduation/Post-Graduation."
  
         if errors:
             raise serializers.ValidationError(errors)
@@ -244,6 +248,28 @@ class SkillSerializer(serializers.ModelSerializer):
         model = Skill
         fields = ['id', 'name']
         read_only_fields = ['id', 'profile']
+
+    def validate_name(self, value):
+        """Validate skill name is not duplicate (case-sensitive)"""
+        value = value.strip()
+        
+        # Check if skill already exists for this profile
+        if self.instance:
+            # For update
+            if Skill.objects.filter(
+                profile=self.context['request'].user.jobseeker_profile,
+                name=value
+            ).exclude(pk=self.instance.pk).exists():
+                raise serializers.ValidationError(f'Skill "{value}" already exists.')
+        else:
+            # For create
+            if Skill.objects.filter(
+                profile=self.context['request'].user.jobseeker_profile,
+                name=value
+            ).exists():
+                raise serializers.ValidationError(f'Skill "{value}" already exists.')
+        
+        return value
  
  
 class LanguageKnownSerializer(serializers.ModelSerializer):
@@ -251,18 +277,66 @@ class LanguageKnownSerializer(serializers.ModelSerializer):
         model = LanguageKnown
         fields = ['id', 'name', 'proficiency']
         read_only_fields = ['id', 'profile']
+
+    def validate_name(self, value):
+        """Validate language name is not duplicate (case-sensitive)"""
+        value = value.strip()
+        
+        # Check if language already exists for this profile
+        if self.instance:
+            # For update
+            if LanguageKnown.objects.filter(
+                profile=self.context['request'].user.jobseeker_profile,
+                name=value
+            ).exclude(pk=self.instance.pk).exists():
+                raise serializers.ValidationError(f'Language "{value}" already exists.')
+        else:
+            # For create
+            if LanguageKnown.objects.filter(
+                profile=self.context['request'].user.jobseeker_profile,
+                name=value
+            ).exists():
+                raise serializers.ValidationError(f'Language "{value}" already exists.')
+        
+        return value
  
  
 class CertificationSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
     certificate_url = serializers.SerializerMethodField(read_only=True)
- 
+    certificate_file = serializers.FileField(required=False, allow_null=True)
+
     class Meta:
         model = Certification
         fields = ['id', 'name', 'certificate_file', 'certificate_url']
-        read_only_fields = ['id', 'profile']
- 
+        read_only_fields = ['certificate_url']
+
     def get_certificate_url(self, obj):
         return obj.certificate_file.url if obj.certificate_file else None
+    
+    def create(self, validated_data):
+        certificate_file = validated_data.pop('certificate_file', None)
+        certification = Certification.objects.create(
+            **validated_data,
+            certificate_file=certificate_file
+        )
+        return certification
+    
+    def update(self, instance, validated_data):
+        certificate_file = validated_data.pop('certificate_file', None)
+        
+        # Update name
+        instance.name = validated_data.get('name', instance.name)
+        
+        # Only update file if a new one is provided
+        if certificate_file:
+            # Delete old file if it exists
+            if instance.certificate_file:
+                instance.certificate_file.delete(save=False)
+            instance.certificate_file = certificate_file
+        
+        instance.save()
+        return instance
  
  
 # Profile Serializers
@@ -273,7 +347,8 @@ class JobSeekerProfileReadSerializer(serializers.ModelSerializer):
     resume_url = serializers.SerializerMethodField()
     email = serializers.EmailField(source="user.email", read_only=True)
     phone = serializers.CharField(source="user.phone", read_only=True)
- 
+    highest_qualification = serializers.SerializerMethodField()
+    
     educations = EducationEntrySerializer(many=True, read_only=True)
     experiences = WorkExperienceEntrySerializer(many=True, read_only=True)
     skills = SkillSerializer(many=True, read_only=True)
@@ -301,37 +376,115 @@ class JobSeekerProfileReadSerializer(serializers.ModelSerializer):
  
     def get_resume_url(self, obj):
         return obj.resume_file.url if obj.resume_file else None
+    
+    def get_highest_qualification(self, obj):
+        """Calculate highest qualification from education entries"""
+        educations = obj.educations.all()
+        
+        # Priority order: Doctorate > Post-Graduation > Graduation > Diploma
+        if educations.filter(qualification_level='Doctorate').exists():
+            return 'Doctorate'
+        if educations.filter(qualification_level='Post-Graduation').exists():
+            return 'Post-Graduation'
+        if educations.filter(qualification_level='Graduation').exists():
+            return 'Graduation'
+        if educations.filter(qualification_level='Diploma').exists():
+            return 'Diploma'
+        
+        # Check HSC for diploma equivalent
+        hsc_entry = educations.filter(qualification_level='HSC').first()
+        if hsc_entry and hsc_entry.post_10th_study == 'Diploma':
+            return 'Diploma'
+        
+        return None
  
  
 class JobSeekerProfileWriteSerializer(WritableNestedModelSerializer):
-    educations = EducationEntrySerializer(many=True, required=False)
+    
     experiences = WorkExperienceEntrySerializer(many=True, required=False)
     skills = SkillSerializer(many=True, required=False)
     languages = LanguageKnownSerializer(many=True, required=False)
     certifications = CertificationSerializer(many=True, required=False)
- 
+    educations = EducationEntrySerializer(many=True, required=False)
+    
+    # ✅ Add this field to receive highest_qualification
+    highest_qualification = serializers.CharField(required=False, allow_null=True)
+    
+    delete_profile_photo = serializers.BooleanField(write_only=True, required=False, default=False)
+
     class Meta:
         model = JobSeekerProfile
-        exclude = ['id', 'user', 'created_at', 'updated_at']
- 
-    def validate(self, data):
-        if data.get('dob') and data['dob'] > timezone.now().date():
-            raise serializers.ValidationError({
-                "dob": "Date of birth cannot be in the future."
-            })
-        return data
- 
+        fields = [
+            'full_name', 'gender', 'dob', 'marital_status', 'nationality',
+            'profile_photo',
+            'current_job_title', 'current_company', 'total_experience_years',
+            'notice_period', 'current_location', 'preferred_locations',
+            'alternate_phone', 'alternate_email', 'full_address',
+            'street', 'city', 'state', 'pincode', 'country',
+            'resume_file',
+            'portfolio_link',
+            'current_ctc', 'expected_ctc', 'preferred_job_type',
+            'preferred_role_industry', 'ready_to_start_immediately',
+            'willing_to_relocate',
+            'experiences', 'skills', 'languages', 'certifications', 'educations',
+            'delete_profile_photo',
+            'highest_qualification'  # ✅ Add this field
+        ]
+
     def update(self, instance, validated_data):
+        print("\n" + "="*60)
+        print("🔄 SERIALIZER UPDATE METHOD")
+        print("="*60)
+        
+        # ✅ Handle highest_qualification if provided
+        highest_qual = validated_data.pop('highest_qualification', None)
+        if highest_qual:
+            print(f"📚 Setting highest_qualification to: {highest_qual}")
+            # You can store this in a database field or just ignore
+            # For now, we'll just log it
+        
+        # Handle photo deletion
+        delete_photo = validated_data.pop('delete_profile_photo', False)
+        
+        # Handle profile photo deletion
+        if delete_photo:
+            print("🗑️ Deleting profile photo...")
+            if instance.profile_photo:
+                try:
+                    instance.profile_photo.delete(save=False)
+                    print(f"   Deleted file: {instance.profile_photo.name}")
+                except Exception as e:
+                    print(f"   Error deleting file: {e}")
+                instance.profile_photo = None
+        
+        # Extract nested data
         skills_data = validated_data.pop('skills', None)
         languages_data = validated_data.pop('languages', None)
         certifications_data = validated_data.pop('certifications', None)
- 
-        # First update normal profile fields + educations + experiences
-        instance = super().update(instance, validated_data)
- 
-        # --------------------------
-        # SKILLS (Replace Completely)
-        # --------------------------
+        educations_data = validated_data.pop('educations', None)
+        experiences_data = validated_data.pop('experiences', None)
+        
+        print(f"📚 Education data received: {educations_data}")
+        
+        # Update simple fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+    
+        # ✅ Update educations (replace all)
+        if educations_data is not None:
+            print(f"\n🔄 Updating educations...")
+            # Delete all existing educations
+            instance.educations.all().delete()
+            # Create new educations
+            for edu in educations_data:
+                EducationEntry.objects.create(
+                    profile=instance,
+                    **edu
+                )
+            print(f"✅ Created {len(educations_data)} education entries")
+    
+        # Update other fields (skills, languages, etc.)
         if skills_data is not None:
             instance.skills.all().delete()
             for skill in skills_data:
@@ -341,9 +494,6 @@ class JobSeekerProfileWriteSerializer(WritableNestedModelSerializer):
                         name=skill["name"].strip()
                     )
  
-        # --------------------------
-        # LANGUAGES (Replace Completely)
-        # --------------------------
         if languages_data is not None:
             instance.languages.all().delete()
             for lang in languages_data:
@@ -354,19 +504,49 @@ class JobSeekerProfileWriteSerializer(WritableNestedModelSerializer):
                         proficiency=lang.get("proficiency")
                     )
  
-        # --------------------------
-        # CERTIFICATIONS (Replace Completely)
-        # --------------------------
         if certifications_data is not None:
-            instance.certifications.all().delete()
-            for cert in certifications_data:
-                if cert.get("name"):
-                    Certification.objects.create(
+            print(f"\n🔄 Updating certifications...")
+            existing_certs = {cert.id: cert for cert in instance.certifications.all()}
+            processed_ids = set()
+            
+            for cert_data in certifications_data:
+                cert_id = cert_data.get('id')
+                cert_name = cert_data.get('name')
+                certificate_file = cert_data.get('certificate_file')
+                
+                if cert_id and cert_id in existing_certs:
+                    existing_cert = existing_certs[cert_id]
+                    existing_cert.name = cert_name.strip()
+                    if certificate_file:
+                        if existing_cert.certificate_file:
+                            existing_cert.certificate_file.delete(save=False)
+                        existing_cert.certificate_file = certificate_file
+                    existing_cert.save()
+                    processed_ids.add(cert_id)
+                else:
+                    new_cert = Certification.objects.create(
                         profile=instance,
-                        name=cert["name"].strip(),
-                        certificate_file=cert.get("certificate_file")
+                        name=cert_name.strip(),
+                        certificate_file=certificate_file if certificate_file and hasattr(certificate_file, 'name') else None
                     )
- 
+                    processed_ids.add(new_cert.id)
+            
+            for cert_id, cert in existing_certs.items():
+                if cert_id not in processed_ids:
+                    if cert.certificate_file:
+                        cert.certificate_file.delete(save=False)
+                    cert.delete()
+    
+        if experiences_data is not None:
+            print(f"\n🔄 Updating experiences...")
+            instance.experiences.all().delete()
+            for exp in experiences_data:
+                WorkExperienceEntry.objects.create(
+                    profile=instance,
+                    **exp
+                )
+    
+        print("\n✅ UPDATE COMPLETED")
         return instance
    
 class AdminProfileReadSerializer(serializers.ModelSerializer):
@@ -383,39 +563,60 @@ class AdminProfileWriteSerializer(serializers.ModelSerializer):
         exclude = ['id', 'user', 'created_at', 'updated_at']
  
  
-# Company Serializer — full & supports create/update/disable
-class CompanySerializer(serializers.ModelSerializer):
-    logo_url = serializers.SerializerMethodField(read_only=True)
-    custom_id = serializers.CharField(read_only=True)  # auto-generated
- 
-    class Meta:
-        model = Company
-        fields = [
-            'id', 'custom_id', 'name', 'logo', 'logo_url',
-            'slogan', 'rating', 'review_count',
-            'company_overview', 'website', 'industry',
-            'employee_count', 'founded_year', 'company_address',
-            'is_active','is_verified'
+# REMOVED: CompanySerializer - Using CompanyProfileSerializer instead
 
+# CompanyProfile Serializer
+class CompanyProfileSerializer(serializers.ModelSerializer):
+    company_logo = serializers.SerializerMethodField(read_only=True)
+    logo_url = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = CompanyProfile
+        fields = [
+            'id',
+            'user',
+            'company_name',
+            'company_moto',
+            'contact_person',
+            'contact_number',
+            'company_email',
+            'website',
+            'company_size',
+            'address1',
+            'address2',
+            'about',
+            'company_logo',
+            'logo_url',
+            'created_at'
         ]
-        read_only_fields = ['id', 'custom_id', 'rating', 'review_count', 'is_active']
- 
+        read_only_fields = ['user', 'created_at']
+
+    def get_company_logo(self, obj):
+        request = self.context.get('request')
+        if obj.company_logo and request:
+            return request.build_absolute_uri(obj.company_logo.url)
+        return None
+
     def get_logo_url(self, obj):
-        return obj.logo.url if obj.logo else None
+        if obj.company_logo:
+            return obj.company_logo.url
+        return None
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        return CompanyProfile.objects.create(user=user, **validated_data)
  
  
- 
-# EmployerProfile Read Serializer
+# EmployerProfile Serializers
 class EmployerProfileReadSerializer(serializers.ModelSerializer):
     user = UserReadSerializer(read_only=True)
-    company = CompanySerializer(read_only=True)
+    company = CompanyProfileSerializer(read_only=True)  # Changed from CompanySerializer to CompanyProfileSerializer
  
     class Meta:
         model = EmployerProfile
         fields = ['id', 'user', 'full_name', 'employee_id', 'company', 'created_at', 'updated_at']
  
  
-# EmployerProfile Write Serializer
 class EmployerProfileWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployerProfile
@@ -434,180 +635,275 @@ class EmployerProfileWriteSerializer(serializers.ModelSerializer):
  
         return value
  
- 
     def validate_company(self, value):
-        if value and not value.is_active:
-            raise serializers.ValidationError("Cannot link to an inactive company.")
+        # CompanyProfile doesn't have is_active field, so we skip that validation
+        # Add any validation needed for CompanyProfile
+        if value:
+            # You can add custom validation here if needed
+            pass
         return value
  
  
-# Job Read Serializer
-class JobReadSerializer(serializers.ModelSerializer):
-    company = CompanySerializer(read_only=True)
-    posted_by = serializers.CharField(source='posted_by.username', read_only=True, default='Company Jobs')
-    job_status_display = serializers.CharField(source='get_job_status_display', read_only=True)
+# PostAJob Serializer
+class PostAJobSerializer(serializers.ModelSerializer):
+    company = serializers.SerializerMethodField()
+    posted_date = serializers.DateTimeField(source='created_at', read_only=True)
+
     class Meta:
-        model = Job
+        model = PostAJob
         fields = [
-            'id', 'title', 'company', 'location',
-            'job_type', 'industry_type', 'experience_required', 'work_type',
-            'salary', 'description', 'responsibilities', 'job_highlights', 'key_skills',
-            'education_required', 'tags', 'department', 'shift', 'duration',
-            'openings', 'applicants_count', 'posted_date', 'posted_by',
-            'is_active','job_status','job_status_display'
+            'id',
+            'job_title',
+            'industry_type',
+            'department',
+            'work_type',
+            'shift',
+            'work_duration',
+            'salary',
+            'experience',
+            'location',
+            'openings',
+            'job_category',
+            'education',
+            'key_skills',
+            'job_highlights',
+            'job_description',
+            'responsibilities',
+            'job_status',
+            'is_published',
+            'posted_date',
+            'employer',
+            'company'
         ]
- 
-# Job Serializer for CREATE (full validation)
-class JobWriteSerializer(serializers.ModelSerializer):
-    company = CompanySerializer(read_only=True)
-    posted_by = serializers.CharField(source='posted_by.username', read_only=True)
- 
-    class Meta:
-        model = Job
-        fields = [
-            'id', 'title', 'company', 'location',
-            'job_type', 'industry_type', 'experience_required', 'work_type',
-            'salary', 'description', 'responsibilities','job_highlights','key_skills',
-            'education_required', 'tags', 'department', 'shift', 'duration',
-            'openings', 'applicants_count', 'posted_date', 'posted_by',
-            'is_active'
+        read_only_fields = [
+            'id',
+            'is_published',
+            'posted_date',
+            'employer'
         ]
-        read_only_fields = ['id', 'company', 'posted_date', 'posted_by', 'applicants_count']
- 
+
+    def get_company(self, obj):
+        if obj.employer and hasattr(obj.employer, 'employer_profile'):
+            if obj.employer.employer_profile.company:
+                return CompanyProfileSerializer(obj.employer.employer_profile.company).data  # Changed to CompanyProfileSerializer
+        return None
+
     def validate(self, data):
+        is_partial = self.context.get('partial', False)
+
+        if not is_partial:
+            required_fields = [
+                'job_title',
+                'work_type',
+                'shift',
+                'work_duration',
+                'salary',
+                'experience',
+                'location',
+                'openings',
+                'job_description'
+            ]
+
+            for field in required_fields:
+                if not data.get(field):
+                    raise serializers.ValidationError({
+                        field: f"{field} is required."
+                    })
+
+        if 'job_status' in data and data['job_status']:
+            valid_statuses = [
+                'Hiring in Progress',
+                'Reviewing Application',
+                'Hiring Done'
+            ]
+            if data['job_status'] not in valid_statuses:
+                raise serializers.ValidationError({
+                    'job_status': f"Invalid status. Choose from: {', '.join(valid_statuses)}"
+                })
+
+        array_fields = [
+            'industry_type',
+            'department',
+            'education',
+            'key_skills',
+            'job_highlights',
+            'responsibilities',
+            'location'
+        ]
+
+        for field in array_fields:
+            if field in data and data[field] is not None:
+                if not isinstance(data[field], list):
+                    raise serializers.ValidationError({
+                        field: f"{field} must be a list."
+                    })
+
+        return data
+
+    def create(self, validated_data):
+        if 'job_status' not in validated_data:
+            validated_data['job_status'] = 'Reviewing Application'
+
+        array_fields = [
+            'industry_type',
+            'department',
+            'education',
+            'key_skills',
+            'job_highlights',
+            'responsibilities',
+            'location'
+        ]
+
+        for field in array_fields:
+            if field in validated_data and validated_data[field]:
+                validated_data[field] = [
+                    item for item in validated_data[field]
+                    if item and str(item).strip()
+                ]
+
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            if value is not None:
+                setattr(instance, attr, value)
+
+        instance.save()
+        return instance
  
+ 
+# Job Read Serializer (for PostAJob)
+class JobReadSerializer(serializers.ModelSerializer):
+    company = serializers.SerializerMethodField()
+    posted_by = serializers.CharField(source='employer.email', read_only=True, default='Company Jobs')
+    applicants_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PostAJob
+        fields = [
+            'id', 'job_title', 'company', 'location',
+            'work_type', 'salary', 'job_description', 
+            'responsibilities', 'job_highlights', 'key_skills',
+            'education', 'shift', 'work_duration',
+            'openings', 'experience', 'created_at', 'posted_by',
+            'is_published', 'job_status', 'applicants_count'
+        ]
+    
+    def get_company(self, obj):
+        if obj.employer and hasattr(obj.employer, 'employer_profile'):
+            if obj.employer.employer_profile.company:
+                return CompanyProfileSerializer(obj.employer.employer_profile.company).data  # Changed to CompanyProfileSerializer
+        return None
+    
+    def get_applicants_count(self, obj):
+        return JobApplication.objects.filter(job=obj).count()
+ 
+ 
+# Job Write Serializer
+class JobWriteSerializer(serializers.ModelSerializer):
+    company = serializers.SerializerMethodField()
+    posted_by = serializers.CharField(source='employer.email', read_only=True)
+    
+    class Meta:
+        model = PostAJob
+        fields = [
+            'id', 'job_title', 'company', 'location',
+            'work_type', 'salary', 'job_description', 
+            'responsibilities', 'job_highlights', 'key_skills',
+            'education', 'shift', 'work_duration',
+            'openings', 'experience', 'created_at', 'posted_by',
+            'is_published', 'job_status'
+        ]
+        read_only_fields = ['id', 'company', 'created_at', 'posted_by', 'is_published']
+    
+    def get_company(self, obj):
+        if obj.employer and hasattr(obj.employer, 'employer_profile'):
+            if obj.employer.employer_profile.company:
+                return CompanyProfileSerializer(obj.employer.employer_profile.company).data  # Changed to CompanyProfileSerializer
+        return None
+    
+    def validate(self, data):
         user = self.context['request'].user
- 
-       
+        
         if not hasattr(user, 'employer_profile'):
-            raise serializers.ValidationError(
-                "Only employers can create/update jobs."
-            )
- 
+            raise serializers.ValidationError("Only employers can create/update jobs.")
+        
         employer_profile = user.employer_profile
- 
-       
+        
         if not employer_profile.company:
             raise serializers.ValidationError(
                 "You must create or link a company in your profile before posting jobs."
             )
- 
-       
+        
         try:
             verification = CompanyVerification.objects.get(employer=user)
         except CompanyVerification.DoesNotExist:
             raise serializers.ValidationError(
                 "Please verify your company first before posting jobs."
             )
- 
+        
         if verification.status != "approved":
             raise serializers.ValidationError(
                 "Your company verification is not approved by admin yet."
             )
- 
-       
-        title = data.get('title')
- 
-        if title and Job.objects.filter(
-            company=employer_profile.company,
-            title__iexact=title
+        
+        title = data.get('job_title')
+        if title and PostAJob.objects.filter(
+            employer=user,
+            job_title__iexact=title
         ).exists():
- 
             raise serializers.ValidationError({
-                "title": f"A job with title '{title}' already exists for this company."
+                "job_title": f"A job with title '{title}' already exists for this company."
             })
- 
+        
         return data
- 
+    
     def create(self, validated_data):
- 
         user = self.context['request'].user
-        employer_profile = user.employer_profile
- 
-        validated_data['posted_by'] = user
-        validated_data['company'] = employer_profile.company
- 
-        return super().create(validated_data)
- 
-    company = CompanySerializer(read_only=True)
-    posted_by = serializers.CharField(source='posted_by.username', read_only=True)
- 
-    class Meta:
-        model = Job
-        fields = [
-            'id', 'title', 'company', 'location',
-            'job_type', 'industry_type', 'experience_required', 'work_type',
-            'salary', 'description', 'responsibilities','job_highlights','key_skills',
-            'education_required', 'tags', 'department', 'shift', 'duration',
-            'openings', 'applicants_count', 'posted_date', 'posted_by',
-            'is_active','job_status'
-        ]
-        read_only_fields = ['id', 'company', 'posted_date', 'posted_by', 'applicants_count']
- 
-    def validate(self, data):
-        user = self.context['request'].user
-        if not hasattr(user, 'employer_profile'):
-            raise serializers.ValidationError("Only employers can create/update jobs.")
-       
-        employer_profile = user.employer_profile
-        if not employer_profile.company:
-            raise serializers.ValidationError(
-                "You must create or link a company in your profile before posting jobs."
-            )
- 
-        # For CREATE: title must be unique per company
-        title = data.get('title')
-        if title and Job.objects.filter(
-            company=employer_profile.company,
-            title__iexact=title
-        ).exists():
-            raise serializers.ValidationError(
-                {"title": f"A job with title '{title}' already exists for this company."}
-            )
- 
-        return data
- 
-    def create(self, validated_data):
-        validated_data['posted_by'] = self.context['request'].user
-        employer_profile = self.context['request'].user.employer_profile
-        validated_data['company'] = employer_profile.company
+        validated_data['employer'] = user
+        validated_data['is_published'] = False
         return super().create(validated_data)
  
  
-# NEW: Separate serializer for UPDATE (PATCH/PUT) - fields optional
+# Job Update Serializer
 class JobUpdateSerializer(serializers.ModelSerializer):
-    company = CompanySerializer(read_only=True)
-    posted_by = serializers.CharField(source='posted_by.username', read_only=True)
- 
+    company = serializers.SerializerMethodField()
+    posted_by = serializers.CharField(source='employer.email', read_only=True)
+    
     class Meta:
-        model = Job
-        fields =  "__all__"
-        read_only_fields = ['id', 'company', 'posted_date', 'posted_by', 'applicants_count']
- 
+        model = PostAJob
+        fields = "__all__"
+        read_only_fields = ['id', 'company', 'created_at', 'posted_by', 'employer']
+    
+    def get_company(self, obj):
+        if obj.employer and hasattr(obj.employer, 'employer_profile'):
+            if obj.employer.employer_profile.company:
+                return CompanyProfileSerializer(obj.employer.employer_profile.company).data  # Changed to CompanyProfileSerializer
+        return None
+    
     def validate(self, data):
         user = self.context['request'].user
         if not hasattr(user, 'employer_profile'):
             raise serializers.ValidationError("Only employers can update jobs.")
-       
-        # Optional: only check title uniqueness if title is being changed
-        title = data.get('title')
+        
+        title = data.get('job_title')
         if title:
             instance = self.instance
-            if Job.objects.filter(
-                company=instance.company,
-                title__iexact=title
+            if PostAJob.objects.filter(
+                employer=user,
+                job_title__iexact=title
             ).exclude(id=instance.id).exists():
                 raise serializers.ValidationError(
-                    {"title": f"A job with title '{title}' already exists for this company."}
+                    {"job_title": f"A job with title '{title}' already exists for this company."}
                 )
- 
         return data
+ 
  
 # JobApplication & SavedJob
 class JobApplicationWriteSerializer(serializers.ModelSerializer):
     resume = serializers.FileField(required=False)
     job = serializers.PrimaryKeyRelatedField(
-        queryset=Job.objects.all()
+        queryset=PostAJob.objects.filter(is_published=True)
     )
  
     class Meta:
@@ -622,7 +918,6 @@ class JobApplicationWriteSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         job = data.get('job')
  
-        # Check if there is already an ACTIVE application
         active_statuses = [
             JobApplication.Status.APPLIED,
             JobApplication.Status.RESUME_SCREENING,
@@ -639,8 +934,7 @@ class JobApplicationWriteSerializer(serializers.ModelSerializer):
             status__in=active_statuses
         ).exists():
             raise serializers.ValidationError(
-                "You already have an active application for this job. "
-                "Please wait for a response or withdraw the existing one."
+                "You already have an active application for this job."
             )
  
         return data
@@ -661,7 +955,7 @@ class JobApplicationWriteSerializer(serializers.ModelSerializer):
  
         return super().create(validated_data)
  
-# NEW: Full read serializer for JobApplication (used after create)
+ 
 class JobApplicationDetailSerializer(serializers.ModelSerializer):
     job = JobReadSerializer(read_only=True)
     user = UserReadSerializer(read_only=True)
@@ -675,17 +969,10 @@ class JobApplicationDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'applied_date', 'user', 'status']
  
  
-from rest_framework import serializers
-from .models import SavedJob
-class JobSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Job
-        fields = "__all__"
- 
 class SavedJobSerializer(serializers.ModelSerializer):
     job = JobReadSerializer(read_only=True)
     job_id = serializers.PrimaryKeyRelatedField(
-        queryset=Job.objects.all(),
+        queryset=PostAJob.objects.all(),
         source="job",
         write_only=True
     )
@@ -694,7 +981,6 @@ class SavedJobSerializer(serializers.ModelSerializer):
         model = SavedJob
         fields = ['id', 'job', 'job_id', 'saved_date']
         read_only_fields = ['id', 'saved_date']
- 
  
  
 class JobApplicationListSerializer(serializers.ModelSerializer):
@@ -715,9 +1001,8 @@ class JobApplicationEmployerSerializer(serializers.ModelSerializer):
         fields = ['id', 'job', 'user', 'applied_date', 'status', 'cover_letter']
         read_only_fields = ['id', 'applied_date']
  
+ 
 # Other Models
- 
- 
 class NewsletterSubscriberSerializer(serializers.ModelSerializer):
     class Meta:
         model = NewsletterSubscriber
@@ -728,11 +1013,9 @@ class NewsletterSubscriberSerializer(serializers.ModelSerializer):
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
-        fields = ['id', 'message', 'created_at', 'is_read']
+        fields = ['id', 'user', 'message', 'created_at', 'is_read', 'notification_type', 'related_object_id']
         read_only_fields = ['id', 'created_at']
  
-from rest_framework import serializers
-from .models import UserSettings
  
 class UserSettingsSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="user.email", read_only=True)
@@ -750,13 +1033,12 @@ class UserSettingsSerializer(serializers.ModelSerializer):
         ]
  
  
- 
 class ChatUserSerializer(serializers.ModelSerializer):
-   
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_online']
         read_only_fields = fields
+ 
  
 class MessageSerializer(serializers.ModelSerializer):
     sender = ChatUserSerializer(read_only=True)
@@ -767,8 +1049,8 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'receiver', 'content', 'timestamp', 'is_read']
         read_only_fields = ['id', 'timestamp']
  
+ 
 class SendMessageSerializer(serializers.Serializer):
-   
     receiver_id = serializers.IntegerField()
     content = serializers.CharField()
    
@@ -781,7 +1063,6 @@ class SendMessageSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError({"receiver_id": "Receiver not found"})
        
-       
         conversation = Conversation.objects.filter(
             participants=sender
         ).filter(
@@ -789,19 +1070,15 @@ class SendMessageSerializer(serializers.Serializer):
         ).first()
        
         if not conversation:
-           
             if sender.user_type != 'employer':
                 raise serializers.ValidationError(
-                    "Only employers can start new conversations. Jobseekers can only reply to existing conversations."
+                    "Only employers can start new conversations."
                 )
         else:
-           
             if sender.user_type == 'jobseeker':
-               
                 employer = conversation.participants.filter(user_type='employer').first()
                 if not employer:
                     raise serializers.ValidationError("No employer found in this conversation")
-               
                
                 if not conversation.jobseeker_can_reply:
                     raise serializers.ValidationError(
@@ -818,18 +1095,15 @@ class SendMessageSerializer(serializers.Serializer):
         content = validated_data['content']
         existing_conversation = validated_data.get('conversation')
        
-       
         if existing_conversation:
             conversation = existing_conversation
         else:
             conversation = Conversation.objects.create()
             conversation.participants.add(sender, receiver)
            
-           
             if sender.user_type == 'employer':
                 conversation.initiated_by = sender
                 conversation.save()
-       
        
         message = Message.objects.create(
             conversation=conversation,
@@ -838,11 +1112,11 @@ class SendMessageSerializer(serializers.Serializer):
             content=content
         )
        
-       
         conversation.save()
        
         return message
    
+ 
 class ConversationSerializer(serializers.ModelSerializer):
     participants = ChatUserSerializer(many=True, read_only=True)
     last_message = serializers.SerializerMethodField()
@@ -870,20 +1144,15 @@ class ConversationSerializer(serializers.ModelSerializer):
         ).count()
    
     def get_conversation_status(self, obj):
-       
         user = self.context['request'].user
        
         if user.user_type == 'employer':
             return "You can message any jobseeker"
-        else:  
+        else:
             if obj.jobseeker_can_reply:
                 return "You can reply to this conversation"
             else:
                 return "Waiting for employer to respond"
-           
-       
-from rest_framework import serializers
-from .models import ChatMessage
  
  
 class ChatMessageSerializer(serializers.ModelSerializer):
@@ -891,14 +1160,12 @@ class ChatMessageSerializer(serializers.ModelSerializer):
         model = ChatMessage
         fields = "__all__"
  
-from rest_framework import serializers
-from .models import HelpTopic
-from .models import RaiseTicket
  
 class HelpTopicSerializer(serializers.ModelSerializer):
     class Meta:
         model = HelpTopic
         fields = ['id', 'title', 'path']
+ 
  
 class RaiseTicketSerializer(serializers.ModelSerializer):
     class Meta:
@@ -906,8 +1173,7 @@ class RaiseTicketSerializer(serializers.ModelSerializer):
         fields = '__all__'
  
  
-# Password Serializer
- 
+# Password Serializers
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
  
@@ -943,25 +1209,22 @@ class CreatePasswordSerializer(serializers.Serializer):
             raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
         return data            
  
-# Contact Us Serializers
  
+# Contact Us Serializer
 class ContactMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContactMessage
         fields = '__all__'    
-
-
-# CompanyVerify Serializer  
  
+ 
+# CompanyVerify Serializer
 class CompanyVerificationSerializer(serializers.ModelSerializer):
- 
     class Meta:
         model = CompanyVerification
         fields = "__all__"
         read_only_fields = ['status', 'employer', 'created_at']
  
     def validate(self, data):
- 
         registration_number = data.get("registration_number")
         tax_id = data.get("tax_id")
  
@@ -980,66 +1243,22 @@ class CompanyVerificationSerializer(serializers.ModelSerializer):
             )
  
         return data
-         
  
  
- 
-# Post a Job Serializer
- 
-from .models import PostAJob
- 
-class PostAJobSerializer(serializers.ModelSerializer):
- 
-    class Meta:
-        model = PostAJob
-        fields = "__all__"
-        read_only_fields = ["employer", "is_published", "created_at"]
-
-
 # OTP Serializer
-
 class VerifyEmailOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
-
- 
-# About Company Serializer
- 
-from rest_framework import serializers
-from .models import CompanyProfile
  
  
-class CompanyProfileSerializer(serializers.ModelSerializer):
- 
-    class Meta:
-        model = CompanyProfile
-        fields = '__all__'
-        read_only_fields = ['user', 'created_at']
- 
-    def create(self, validated_data):
-        user = self.context['request'].user
-        return CompanyProfile.objects.create(user=user, **validated_data)
- 
- # Report a Job Serializer
+# REMOVED: Duplicate CompanyProfileSerializer (now defined above)
  
  
-from rest_framework import serializers
-from django.utils import timezone
-from .models import Complaint, Job
- 
+# Report a Job Serializer
 class ComplaintSerializer(serializers.ModelSerializer):
-    # Custom fields for display
     firstName = serializers.CharField(source='first_name')
     lastName = serializers.CharField(source='last_name')
-   
-    # Job related fields
-    job_details = serializers.SerializerMethodField()
-    reported_job_title_display = serializers.CharField(source='reported_job_title', read_only=True)
-    reported_company_display = serializers.CharField(source='reported_employer_name', read_only=True)
-   
-    # For creating complaint (write-only)
-    job_id = serializers.IntegerField(write_only=True, required=True)  # Make required
-   
+ 
     class Meta:
         model = Complaint
         fields = [
@@ -1051,131 +1270,45 @@ class ComplaintSerializer(serializers.ModelSerializer):
             'reason',
             'explanation',
             'status',
-            'created_at',
-            'updated_at',
-            'reported_job',
-            'job_id',
-            'job_details',
-            'reported_job_title_display',
-            'reported_company_display',
-            'admin_notes'
+            'created_at'
         ]
-        read_only_fields = ['status', 'created_at', 'updated_at', 'reported_job', 'admin_notes']
-   
-    def get_job_details(self, obj):
-        """Get detailed job information for admin view"""
-        if obj.reported_job:
-            return {
-                'id': obj.reported_job.id,
-                'title': obj.reported_job.title,
-                'location': obj.reported_job.location,
-                'salary': obj.reported_job.salary,
-                'job_type': obj.reported_job.job_type,
-                'work_type': obj.reported_job.work_type,
-                'experience_required': obj.reported_job.experience_required,
-                'company': {
-                    'id': obj.reported_job.company.id if obj.reported_job.company else None,
-                    'name': obj.reported_job.company.name if obj.reported_job.company else '',
-                } if obj.reported_job.company else None,
-                'posted_date': obj.reported_job.posted_date,
-                'is_active': obj.reported_job.is_active
-            }
-        return None
-   
-    def validate_job_id(self, value):
-        """Validate that the job exists"""
-        try:
-            job = Job.objects.select_related('company').get(id=value)
-            if not job.is_active:
-                raise serializers.ValidationError("Cannot report an inactive job.")
-            return value
-        except Job.DoesNotExist:
-            raise serializers.ValidationError("The job you're reporting does not exist.")
-   
+        read_only_fields = ['status', 'created_at']
+ 
     def validate_mobile(self, value):
         if not value.isdigit() or len(value) != 10:
             raise serializers.ValidationError("Enter valid 10-digit mobile number")
         return value
-   
+ 
     def validate(self, data):
         user = self.context['request'].user
-        job_id = data.get('job_id')
-       
-        # Check if user has already reported THIS SPECIFIC job
-        # This is the key validation - prevents reporting same job multiple times
-        if job_id:
-            existing_report_for_same_job = Complaint.objects.filter(
-                user=user,
-                reported_job_id=job_id
-            ).exclude(status='resolved').first()
-           
-            if existing_report_for_same_job:
-                raise serializers.ValidationError({
-                    'job_id': f"You have already reported this specific job. Status: {existing_report_for_same_job.get_status_display()}"
-                })
-       
-        # Optional: Add rate limiting to prevent spam
-        # Check how many reports user has made in last 24 hours
-        twenty_four_hours_ago = timezone.now() - timezone.timedelta(hours=24)
-        recent_reports = Complaint.objects.filter(
-            user=user,
-            created_at__gte=twenty_four_hours_ago
-        ).count()
-       
-        if recent_reports >= 10:  # Max 10 reports per day
-            raise serializers.ValidationError(
-                "You have reached the daily limit of 10 reports. Please try again tomorrow."
-            )
-       
-        # Validate explanation length
-        explanation = data.get('explanation', '')
-        if len(explanation) < 20:
-            raise serializers.ValidationError({
-                'explanation': "Please provide more details (minimum 20 characters)."
-            })
-       
+ 
+        if Complaint.objects.filter(user=user, reason=data.get('reason')).exists():
+            raise serializers.ValidationError("You already submitted this complaint")
+ 
         return data
-   
-    def create(self, validated_data):
-        user = self.context['request'].user
-        job_id = validated_data.pop('job_id')
-       
-        # Get the job
-        job = Job.objects.get(id=job_id)
-        validated_data['reported_job'] = job
-       
-        # Auto-fill user details from profile if not provided
-        if not validated_data.get('first_name'):
-            validated_data['first_name'] = user.first_name or user.username
-        if not validated_data.get('last_name'):
-            validated_data['last_name'] = ''
-        if not validated_data.get('email'):
-            validated_data['email'] = user.email
-        if not validated_data.get('mobile'):
-            if hasattr(user, 'jobseeker_profile'):
-                validated_data['mobile'] = user.jobseeker_profile.alternate_phone or user.phone or ''
-            else:
-                validated_data['mobile'] = user.phone or ''
-       
-        # Create complaint
-        complaint = Complaint.objects.create(user=user, **validated_data)
-       
-        return complaint
- 
- # About Company Serializer
- 
-from rest_framework import serializers
-from .models import CompanyProfile
- 
- 
-class CompanyProfileSerializer(serializers.ModelSerializer):
- 
+    
+# Billing Serializer
+
+class PlanSerializer(serializers.ModelSerializer):
     class Meta:
-        model = CompanyProfile
-        fields = '__all__'
-        read_only_fields = ['user', 'created_at']
- 
-    def create(self, validated_data):
-        user = self.context['request'].user
-        return CompanyProfile.objects.create(user=user, **validated_data)    
- 
+        model = Plan
+        fields = "__all__"
+
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    plan = PlanSerializer()
+    class Meta:
+        model = Subscription
+        fields = "__all__"
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Invoice
+        fields = "__all__"
+
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentMethod
+        fields = "__all__"
