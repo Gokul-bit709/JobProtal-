@@ -195,11 +195,14 @@ CHANNEL_LAYERS = {
     }
 }
 
-import os
-
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
-
-
 RAZORPAY_KEY = 'rzp_test_Sas2pzeBQ0EZAi'
 RAZORPAY_SECRET = '517P0G6FJx9HqA3w4t3aOn4o'
 RAZORPAY_WEBHOOK_SECRET = ''
+
+import os
+ 
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+GOOGLE_CLIENT_ID = "105293618059-al95762js6gc2o9umchkb3la0mnirhs1.apps.googleusercontent.com"
+#GOOGLE_CLIENT_ID = "146646258104-184rcr7uv1mpttpi8bjf9tjq2r2ijg1i.apps.googleusercontent.com"
+ 

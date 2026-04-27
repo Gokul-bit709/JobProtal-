@@ -1,39 +1,19 @@
-import React, { useState ,useEffect} from 'react'
-import './Opportunities.css'
-import  {OpportunitiesCard}  from "./OpportunitiesCard";
-import Apple from '../assets/Apple-Logo.png'
-import Wipro from '../assets/WIT.png'
-import CTS from '../assets/CTSH_BIG.png'
-import Amazon from '../assets/AMZN_BIG.png'
-import Google from '../assets/GOOG.png'
-import Infy from '../assets/INFY_BIG.png'
-import Tcs from '../assets/TCS.png'
-import META from '../assets/META_BIG.png'
-import { useNavigate } from "react-router-dom";
-import { JobList } from '../JobList';
-import axios from 'axios';
+import React from 'react';
+import './Opportunities.css';
+import { OpportunitiesCard } from "./OpportunitiesCard";
 
+export const Opportunities = ({ jobs = [] }) => {
+  if (!jobs || jobs.length === 0) {
+    return <p className="empty-state">No opportunities available</p>;
+  }
+  console.log("jobs:",jobs);
+  
 
-export const Opportunities = () => {
-  const [jobs, setJobs] = useState([]);
- 
-  useEffect(() => {
-    axios.get("http://127.0.0.1:8000/api/Jcompanies/opportunitiescard/")
-      .then(res => {
-        setJobs(res.data);
-      })
-      .catch(err => {
-        console.error("Error fetching opportunities:", err);
-      });
-  }, []);
-  return ( 
-     
-
+  return (
       <div className="Opportunities-job-list">
-        {jobs.map((job, index) => (
-          <OpportunitiesCard key={index} job={job} />
+      {jobs.map((job) => (
+          <OpportunitiesCard key={job.id} job={job} />
         ))}
-        
       </div>
-  )
-}
+  );
+};

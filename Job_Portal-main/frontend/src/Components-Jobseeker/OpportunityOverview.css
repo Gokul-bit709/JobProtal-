@@ -212,3 +212,52 @@ ul {
 .similar-job-footer-posted {
   margin-top: 2px;
 }
+
+.Opportunities-job-type {
+    color: #1a73e8;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+/* Row layout */
+.Opportunities-row {
+  display: flex;
+  gap: 30px;
+  margin-top: 8px;
+  font-size: 14px;
+  color: #83858B;
+}
+
+/* Internship / Full-time badge */
+.Opportunities-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Internship style */
+.Opportunities-badge.internship {
+  border: 1px solid #f7931a;
+  color: #f7931a;
+}
+
+/* Full-time style */
+.Opportunities-badge.fulltime {
+  border: 1px solid #1E88E5;
+  color: #1E88E5;
+}
+
+/* On-site / Hybrid */
+.Opportunities-mode {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1E88E5;
+}
+
+/* Badge + mode alignment */
+.Opportunities-type-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}

@@ -1,18 +1,20 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Link } from 'react-router-dom'
 import './Jcreatepassword.css'
 import confirm_password from "../assets/ConfirmPassword.png"
 import eye from '../assets/show_password.png'
 import eyeHide from '../assets/eye-hide.png'
-import axios from 'axios';
-import { useNavigate  } from "react-router-dom";
-
+import api from '../api/axios'
 
 export const Jcreatepassword = () => {
+
   const [passwordShow, setPasswordShow] = useState(true)
   const [confirmPasswordShow, setconfirmPasswordShow] = useState(true)
-  const email = new URLSearchParams(location.search).get("email");
-    
+
+  const navigate = useNavigate();
+
   const togglePasswordView = () => {
     setPasswordShow((prev) => !prev)
   }
@@ -22,12 +24,9 @@ export const Jcreatepassword = () => {
    }
 
   const initialValues = { newPassword: "", confirmPassword: "" }
-  const [successMsg, setSuccessMsg] = useState("");
+
   const [formValues, setFormValues] = useState(initialValues)
   const [errors, setErrors] = useState({})
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-   
 
 
   const handleForm = (e) => {
@@ -36,6 +35,8 @@ export const Jcreatepassword = () => {
     setErrors({ ...errors, [name]: "" })
   }
 
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^?&*]{8,}$/
+
   const validateForm = () => {
     const newErrors = {}
 
@@ -43,6 +44,9 @@ export const Jcreatepassword = () => {
       newErrors.newPassword = "Password is required"
     } else if (formValues.newPassword.length < 8) {
       newErrors.newPassword = "Password must be at least 8 characters"
+    } else if (!passwordRegex.test(formValues.newPassword)) {
+      newErrors.newPassword =
+        "Password must be at least 8 characters long, with uppercase, lowercase, a number, and a special";;
     }
 
     if (!formValues.confirmPassword.trim()) {
@@ -57,49 +61,60 @@ export const Jcreatepassword = () => {
     return Object.keys(newErrors).length === 0
   }
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  
+  const location = useLocation(); //location
 
-  if (!validateForm()) return;
+  // for token validation
+  useEffect(()=>{
+    const queryParams        = new URLSearchParams(location.search);
+    const tokenFromURL       = queryParams.get('token');
 
-  if (!email) {
-    setErrors({ confirmPassword: "Invalid or expired reset link" });
-    return;
+    if(tokenFromURL){
+      validateToken(tokenFromURL);
+    }
+  },[])
+
+  //validate's the token
+  const validateToken = async (tokenString) => {
+    try {
+       const data = await api.post('auth/validate-reset-token/',
+        {token : tokenString,} // object
+      )
+    } catch (error) {
+      alert('Invalid token or expired token')
+    }
   }
 
-  setLoading(true);
+  // reset password integretion
 
-  try {
-    const res = await axios.post(
-      "http://127.0.0.1:8000/api/reset-password/",
-      {
-        email,
-        newPassword: formValues.newPassword
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const queryParams        = new URLSearchParams(location.search);
+    const tokenFromURL       = queryParams.get('token');
+    if (!validateForm()) {
+      return false
+    }
+    try {
+      const res = await api.post('auth/reset-password-confirm/',
+      { token : tokenFromURL,
+        new_password : formValues.newPassword,
+        confirm_password : formValues.confirmPassword
       }
-    );
+    )
+     alert(res.data.message);
+     navigate("/Job-portal/jobseeker/login")
 
-    setSuccessMsg(res.data.message);
-
-    setTimeout(() => {
-      navigate("/Job-portal/jobseeker/login");
-    }, 1500);
-
-  } catch (err) {
-    setErrors({
-      confirmPassword:
-        err.response?.data?.error || "Something went wrong"
-    });
-  } finally {
-    setLoading(false);
-  }
-};
-
+    } catch (error) {
+      alert('Invalid token or expired token')
+      }
+    }
 
   return (
     <div className="j-create-password-page">
       <header className="j-create-password-header">
         <Link to="/Job-portal" className="logo">
-          <span className="logo-text">job portal</span>
+          <span className="logo-text">Job portal</span>
         </Link>
         <div className="j-create-password-header-links">
           <span className='no-account'>Create a new account?</span>
@@ -112,9 +127,6 @@ const handleSubmit = async (e) => {
         </div>
         <form onSubmit={handleSubmit} className="create-password-form">
           <h2>Create a New Password</h2>
-          {successMsg && (
-    <p className="success-msg">{successMsg}</p>
-  )}
 
           <label>New Password</label>
           <div className="password-wrapper">
@@ -122,7 +134,7 @@ const handleSubmit = async (e) => {
               value={formValues.newPassword}
               onChange={handleForm}
               className={errors.newPassword ? "input-error" : ""} />
-            <span className="eye-icon" onClick={togglePasswordView}><img src={passwordShow ? eye : eyeHide} className='show-icon' alt='show' /></span>
+            <span className="eye-icon" onClick={togglePasswordView}><img src={passwordShow ? eyeHide : eye} className='show-icon' alt='show' /></span>
           </div>
           {errors.newPassword && <span className="error-msg">{errors.newPassword}</span>}
 
@@ -132,11 +144,11 @@ const handleSubmit = async (e) => {
               value={formValues.confirmPassword}
               onChange={handleForm}
               className={errors.confirmPassword ? "input-error" : ""} />
-            <span className="eye-icon" onClick={toggleConfirmPasswordView}><img src={confirmPasswordShow ? eye : eyeHide} className='show-icon' alt='show' /></span>
+            <span className="eye-icon" onClick={toggleConfirmPasswordView}><img src={confirmPasswordShow ? eyeHide : eye} className='show-icon' alt='show' /></span>
           </div>
           {errors.confirmPassword && <span className="error-msg">{errors.confirmPassword}</span>}
 
-          <button type="submit"  className="j-reset-link-btn">Reset Password</button>
+          <button type='submit' className="j-reset-link-btn">Reset Password</button>
 
           <div className='center-div-text'>
             <p>Remember your password? <Link to="/Job-portal/jobseeker/login" className='j-password-form-login-link'>Login</Link></p>

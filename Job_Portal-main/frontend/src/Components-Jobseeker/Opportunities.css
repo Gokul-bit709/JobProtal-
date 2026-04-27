@@ -37,3 +37,15 @@
   background: #1E88E5;
   color: #fff;
 }
+
+@media screen and (max-width: 768px) {
+.Opportunities-job-list {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 20px;
+  justify-items: center;
+  margin-top: 40px;
+  margin-left: 10px;
+  margin-right: 15px;
+}
+}

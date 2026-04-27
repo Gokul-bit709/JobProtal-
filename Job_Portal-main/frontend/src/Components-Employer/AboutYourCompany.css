@@ -1,0 +1,158 @@
+.aboutcompany-container {
+  /* max-width: 800px; */
+  margin: 102px 200px 40px;
+  background: #ffffff;
+  padding: 30px 40px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+ 
+.aboutcompany-title {
+  text-align: center;
+  background: #eaf2f8;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 0 70px 30px;
+  font-weight: 600;
+}
+ 
+.aboutcompany-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+ 
+.aboutcompany-form-group {
+  display: flex;
+  flex-direction: column;
+}
+ 
+.aboutcompany-form-group label {
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: #444;
+}
+ 
+.aboutcompany-form-group input,
+.aboutcompany-form-group select,
+.aboutcompany-form-group textarea {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #dcdcdc;
+  font-size: 14px;
+  font-family: sans-serif;
+  outline: none;
+}
+ 
+ 
+/* .aboutcompany-form-group input, 
+
+.aboutcompany-form-group select {
+
+    padding: 10px 12px;
+
+    border: 1px solid #ccc;
+
+    border-radius: 5px;
+
+    font-size: 14px;
+
+    height: 45px; 
+
+    background-color: white;
+
+    appearance: none;
+
+    outline: none;
+
+    transition: border-color 0.3s ease;
+
+} */
+ 
+ 
+.aboutcompany-form-group input:focus,
+.aboutcompany-form-group textarea:focus {
+  border-color: #1e88e5;
+}
+ 
+.aboutcompany-form-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-top: 20px;
+}
+ 
+.aboutcompany-back-btn {
+  background: transparent;
+  border: none;
+  color: #1e88e5;
+  font-weight: 500;
+  cursor: pointer;
+}
+ 
+.aboutcompany-next-btn {
+  background: #1e88e5;
+  color: white;
+  border: none;
+  padding: 8px 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+}
+ 
+.aboutcompany-next-btn:hover {
+  background: #1565c0;
+}
+ 
+.aboutcompany-file-upload-box {
+  border: 1px dashed #ccc;
+  padding: 15px;
+  border-radius: 6px;
+  background: #fafafa;
+  position: relative;
+}
+ 
+.aboutcompany-file-upload-box input {
+  margin-bottom: 10px;
+}
+ 
+.aboutcompany-file-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: white;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #eee;
+}
+ 
+.aboutcompany-file-preview img {
+  width: 40px;
+}
+ 
+.aboutcompany-upload-placeholder {
+  display: block;
+  padding: 20px;
+  text-align: center;
+  color: #666;
+  cursor: pointer;
+}
+ 
+.aboutcompany-file-preview {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+ 
+.aboutcompany-file-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+ 
+.aboutcompany-clickable-area {
+  cursor: pointer;
+}

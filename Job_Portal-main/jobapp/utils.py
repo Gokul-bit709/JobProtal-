@@ -43,6 +43,38 @@ If you didn't request this, please ignore this email.
         [user.email],
         fail_silently=False,
     )
+
+def generate_company_otp():
+    """Generate a 6-digit OTP for company email verification"""
+    import random
+    return str(random.randint(100000, 999999))
+
+def send_company_email_otp(email, otp, company_name):
+    """Send OTP to company email for verification"""
+    from django.core.mail import send_mail
+    from django.conf import settings
+    
+    subject = f"Verify your company email - {company_name}"
+    message = f"""
+Hello,
+
+Your OTP for verifying company email {email} is: {otp}
+
+This OTP is valid for 10 minutes.
+
+If you didn't request this, please ignore this email.
+
+Thank you,
+Job Portal Team
+"""
+    
+    send_mail(
+        subject,
+        message,
+        settings.EMAIL_HOST_USER,
+        [email],
+        fail_silently=False,
+    )    
  
 # OTP Functions
  

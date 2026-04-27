@@ -1,8 +1,7 @@
 import React from 'react'
-import { JHeader } from '../Components-Jobseeker/JHeader'
 import './AboutUs.css'
 import WorkLife from "../assets/WorkLifeBet.png"
-import forjobseekers from '../assets/jobseeker.png'
+import forjobseekers from '../assets/jobSeeker.png'
 import forEmployers from '../assets/ForEmployees.png'
 import forEmployees from '../assets/ForEmployers.png'
 import { Footer } from './Footer'
@@ -12,11 +11,12 @@ import Blogs from '../assets/Blog.png'
 import HiringJobs from '../assets/HiringatJobportal.png'
 import Success from '../assets/Success.png'
 import Research from '../assets/Research.png'
+import { FHeader } from '../Components-Jobseeker/FHeader'
 
 export const AboutUs = () => {
     return (
         <>
-            <JHeader />
+            <FHeader />
             <div className='AboutusHeaderContainer'>
                 <div>
                     <h1 className='AboutusHeader'>About us / <span className='AboutusHeaderSpan'>Who we are</span></h1>
@@ -28,7 +28,7 @@ export const AboutUs = () => {
 
                         <h1 className='AboutusHeaderSpan'>Making WorkLife Better</h1>
                         <p>So, what is Job portal? We’re a thriving community for workplace conversations, driven by a simple mission to make worklife better, together.</p>
-                        <p><span className='AboutusHeaderSpan'>B</span>ut the way we do it? That’s not so simple. </p><p>Every day, we’re inspired to build a healthier, more transparent work community for all and we’re committed to your trust. Through the products we make and the communities we create, we give people an inside look at companies and careers, so they can find the right job and workplace for them.
+                        <p><span className='AboutusHeaderSpan'></span>But the way we do it? That’s not so simple. </p><p>Every day, we’re inspired to build a healthier, more transparent work community for all and we’re committed to your trust. Through the products we make and the communities we create, we give people an inside look at companies and careers, so they can find the right job and workplace for them.
                             Together, we’re fostering a world where people have the support and resources they need to make the most of their worklife</p>
                     </div>
 

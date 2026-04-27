@@ -1,25 +1,25 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import confirm_password from "../assets/ConfirmPassword.png"
 import eye from '../assets/show_password.png'
 import eyeHide from '../assets/eye-hide.png'
-import axios from 'axios';
+import api from '../api/axios'
+
 
 export const Ecreatepassword = () => {
   const [passwordShow, setPasswordShow] = useState(true)
-  const [loading, setLoading] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
-   
 
   const [confirmPasswordShow, setconfirmPasswordShow] = useState(true)
-  
+  const navigate = useNavigate();
+
   const togglePasswordView = () => {
     setPasswordShow((prev) => !prev)
-   }
+  }
 
   const toggleConfirmPasswordView = () => {
     setconfirmPasswordShow((prev) => !prev)
-   }
+  }
 
   const initialValues = { newPassword: "", confirmPassword: "" }
 
@@ -35,10 +35,23 @@ export const Ecreatepassword = () => {
   const validateForm = () => {
     const newErrors = {}
 
+    const regexofUppercase = /[A-Z]/;
+    const regexofNumber = /[0-9]/;
+    const regexofSpecialChar = /[!@#$%^&*]/;
+    const regexofLowercase = /[a-z]/;
+
     if (!formValues.newPassword.trim()) {
-      newErrors.newPassword = "Password is required"
+      newErrors.newPassword = "New Password is required";
     } else if (formValues.newPassword.length < 8) {
-      newErrors.newPassword = "Password must be at least 8 characters"
+      newErrors.newPassword = "Password must be at least 8 characters long";
+    } else if (!regexofLowercase.test(formValues.newPassword) && !regexofUppercase.test(formValues.newPassword)) {
+      newErrors.newPassword = "Password must contain at least one letter";
+    } else if (!regexofNumber.test(formValues.newPassword)) {
+      newErrors.newPassword = "Password must contain at least one number";
+    } else if (!regexofSpecialChar.test(formValues.newPassword)) {
+      newErrors.newPassword = "Password must contain at least one special character (e.g., ! @ # $)";
+    } else if (!regexofUppercase.test(formValues.newPassword)) {
+      newErrors.newPassword = "Password must contain at least one uppercase letter";
     }
 
     if (!formValues.confirmPassword.trim()) {
@@ -53,45 +66,38 @@ export const Ecreatepassword = () => {
     return Object.keys(newErrors).length === 0
   }
 
-const handleSubmit = async (e) => {
-    
 
-    if (!validateForm()) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-    setLoading(true);
-
-    try {
-      const res = await axios.post(
-        "http://127.0.0.1:8000/api/employer/reset-password/",
-        {
-          user_id: userId,
-          email: formValues.email,
-          new_password: formValues.newPassword,
-        }
-      );
-
-      setSuccessMsg(res.data.message);
-
-      setTimeout(() => {
-        navigate("/Job-portal/employer/login");
-      }, 2000);
-
-    } catch (err) {
-      setErrors(
-        err.response?.data || { general: "Password reset failed" }
-      );
-    } finally {
-      setLoading(false);
+    const queryParams = new URLSearchParams(location.search);
+    const tokenFromURL = queryParams.get('token');
+    if (!validateForm()) {
+      return false
     }
-  };
+    try {
+      const res = await api.post('auth/reset-password-confirm/',
+        {
+          token: tokenFromURL,
+          new_password: formValues.newPassword,
+          confirm_password: formValues.confirmPassword
+        }
+      )
+      alert(res.data.message);
+      navigate('/Job-portal/employer/login')
 
+
+    } catch (error) {
+      alert('Invalid token or expired token')
+    }
+  }
 
   return (
     <div className="j-create-password-page">
       <header className="j-create-password-header">
         <Link to="/Job-portal" className="logo">
-          <span className="logo-text">job portal</span>
-          <span className='subtext'>for Employers</span>
+          <span className="logo-text">Job portal</span>
+          <span className='subtext'>For Employers</span>
         </Link>
         <div className="j-create-password-header-links">
           <span className='no-account'>Create a new account?</span>
@@ -111,7 +117,7 @@ const handleSubmit = async (e) => {
               value={formValues.newPassword}
               onChange={handleForm}
               className={errors.newPassword ? "input-error" : ""} />
-              <span className="eye-icon" onClick={togglePasswordView}><img src={passwordShow ? eye : eyeHide} className='show-icon' alt='show' /></span>
+            <span className="eye-icon" onClick={togglePasswordView}><img src={passwordShow ? eyeHide : eye} className='show-icon' alt='show' /></span>
           </div>
           {errors.newPassword && <span className="error-msg">{errors.newPassword}</span>}
 
@@ -121,7 +127,7 @@ const handleSubmit = async (e) => {
               value={formValues.confirmPassword}
               onChange={handleForm}
               className={errors.confirmPassword ? "input-error" : ""} />
-            <span className="eye-icon" onClick={toggleConfirmPasswordView}><img src={confirmPasswordShow ? eye : eyeHide} className='show-icon' alt='show' /></span>
+            <span className="eye-icon" onClick={toggleConfirmPasswordView}><img src={confirmPasswordShow ? eyeHide : eye} className='show-icon' alt='show' /></span>
           </div>
           {errors.confirmPassword && <span className="error-msg">{errors.confirmPassword}</span>}
 
@@ -135,4 +141,3 @@ const handleSubmit = async (e) => {
     </div>
   )
 }
-

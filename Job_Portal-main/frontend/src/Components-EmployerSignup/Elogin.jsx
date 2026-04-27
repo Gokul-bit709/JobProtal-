@@ -1,22 +1,35 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../api/axios";
 import manSitting from "../assets/Illustration_1.png";
 import eye from "../assets/show_password.png";
 import eyeHide from "../assets/eye-hide.png";
 import "./Elogin.css";
 
 export const Elogin = () => {
-  const navigate = useNavigate(); // ✅ FIX 1
+  const navigate = useNavigate();
+  const savedEmail = localStorage.getItem("rememberedEmail");
+  const savedPassword = localStorage.getItem("rememberedPassword");
+  const [rememberMe, setRememberMe] = useState(false);
 
   const [passwordShow, setPasswordShow] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
   const [formValues, setFormValues] = useState({
-    username: "",
-    password: "",
+    username: savedEmail || "",
+    password: savedPassword || "",
   });
+
+  useEffect(() => {
+    if (localStorage.getItem("rememberedEmail")) {
+      setRememberMe(true);
+    }
+  }, []);
+
+  const handleRememberMeChange = (e) => {
+    setRememberMe(e.target.checked);
+  };
 
   const togglePasswordView = () => {
     setPasswordShow((prev) => !prev);
@@ -43,7 +56,41 @@ export const Elogin = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // ✅ FIX 2 – correct submit handler
+  // Function to check onboarding status and redirect
+  const checkAndRedirect = async () => {
+    try {
+      const response = await api.get('/employer/onboarding-status/');
+      console.log("Onboarding status:", response.data);
+      
+      const { has_company_profile, has_verification, verification_status } = response.data;
+      
+      // Redirect based on status
+      if (!has_company_profile) {
+        // No company profile - go to About Your Company
+        navigate('/Job-portal/Employer/about-your-company', { 
+          state: { fromSignup: false, fromLoginRedirect: true }
+        });
+      } else if (!has_verification) {
+        // Has company but no verification - go to Company Verify
+        navigate('/Job-portal/Employer/about-your-company/company-verification', {
+          state: { fromLoginRedirect: true }
+        });
+      } else if (verification_status === 'rejected') {
+        // Verification rejected - go to Company Verify to resubmit
+        navigate('/Job-portal/Employer/about-your-company/company-verification', {
+          state: { fromLoginRedirect: true, rejected: true }
+        });
+      } else {
+        // Has company and verification (pending or approved) - go to Dashboard
+        navigate('/Job-portal/employer/dashboard');
+      }
+    } catch (error) {
+      console.error("Error checking status:", error);
+      // On error, still go to dashboard
+      navigate('/Job-portal/employer/dashboard');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -52,21 +99,54 @@ export const Elogin = () => {
     setLoading(true);
 
     try {
-      const res = await axios.post("http://127.0.0.1:8000/api/login/",
+      const res = await api.post("/login/", {
+        email: formValues.username,
+        password: formValues.password,
+      });
 
-        {
-          email: formValues.username,
-          password: formValues.password,
-        }
-      );
+      console.log("Login response:", res.data);
 
-      // ✅ Save tokens
+      if (rememberMe) {
+        localStorage.setItem("rememberedEmail", formValues.username);
+        localStorage.setItem("rememberedPassword", formValues.password);
+      } else {
+        localStorage.removeItem("rememberedEmail");
+        localStorage.removeItem("rememberedPassword");
+      }
+      
+      // Save ALL necessary data to localStorage
       localStorage.setItem("access", res.data.access);
       localStorage.setItem("refresh", res.data.refresh);
+      localStorage.setItem("userRole", "Employer");
 
-      // ✅ Redirect after login
-      navigate("/Job-portal/employer/dashboard");
+      // Save user_id
+      if (res.data.user_id) {
+        localStorage.setItem("user_id", res.data.user_id);
+      } else if (res.data.user && res.data.user.id) {
+        localStorage.setItem("user_id", res.data.user.id);
+      } else if (res.data.id) {
+        localStorage.setItem("user_id", res.data.id);
+      }
+
+      // Save user type
+      localStorage.setItem("user_type", res.data.user.user_type);
+
+      // Optional: Save profile_id if available
+      if (res.data.profile_id) {
+        localStorage.setItem("profile_id", res.data.profile_id);
+      }
+
+      console.log("Saved to localStorage:", {
+        user_id: localStorage.getItem("user_id"),
+        user_type: localStorage.getItem("user_type"),
+        access: localStorage.getItem("access") ? "present" : "missing"
+      });
+
+      // ✅ Check onboarding status and redirect accordingly
+      await checkAndRedirect();
+      
     } catch (err) {
+      console.error("Login error:", err);
       setErrors({
         general: "Invalid email or password",
       });
@@ -79,8 +159,8 @@ export const Elogin = () => {
     <div className="login-page">
       <header className="login-header">
         <Link to="/Job-portal" className="logo">
-          <span className="logo-text">job portal</span>
-          <span className="subtext">for Employers</span>
+          <span className="logo-text">Job portal</span>
+          <span className="subtext">For Employers</span>
         </Link>
         <div className="header-links">
           <span className="no-account">Don’t have an account?</span>
@@ -102,7 +182,6 @@ export const Elogin = () => {
           <img src={manSitting} alt="Login Illustration" />
         </div>
 
-        {/* ✅ FIX 3 – use onSubmit, NOT action */}
         <form onSubmit={handleSubmit} className="login-form">
           <h2>Login to continue</h2>
 
@@ -112,7 +191,7 @@ export const Elogin = () => {
 
           <label>Email ID</label>
           <input
-            type="text"
+            type="email"
             name="username"
             placeholder="Enter your email address"
             value={formValues.username}
@@ -135,7 +214,7 @@ export const Elogin = () => {
             />
             <span className="eye-icon" onClick={togglePasswordView}>
               <img
-                src={passwordShow ? eye : eyeHide}
+                src={passwordShow ? eyeHide : eye}
                 className="show-icon"
                 alt="toggle"
               />
@@ -147,7 +226,12 @@ export const Elogin = () => {
 
           <div className="form-options">
             <label>
-              <input type="checkbox" /> Remember me
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={handleRememberMeChange}
+              />
+              Remember me
             </label>
             <Link
               to="/Job-portal/employer/login/forgotpassword"

@@ -3,14 +3,13 @@ import { Link } from 'react-router-dom'
 import { useNavigate } from "react-router-dom";
 import forgot from "../assets/Forgot.png"
 import './Eforgotpassword.css'
-import axios from 'axios';
+import api from '../api/axios'
 
 export const Eforgotpassword = () => {
   const navigate = useNavigate();
 
   const [formValues, setFormValues] = useState({ email: "" })
-  const [loading, setLoading] = useState(false);
-  const [successMsg, setSuccessMsg] = useState("");
+
   const [errors, setErrors] = useState({})
 
   const handleForm = (e) => {
@@ -34,43 +33,26 @@ export const Eforgotpassword = () => {
     return Object.keys(newErrors).length === 0
   }
 
-const handleSubmit = async (e) => {
-     
-
-    if (!validateForm()) return;
-
-    setLoading(true);
-
-    try {
-      const res = await axios.post(
-        "http://127.0.0.1:8000/api/employer/forgot-password/",
-        { email: formValues.email }
-      );
-
-      setSuccessMsg(res.data.message || "Reset link sent to email");
-
-      // Redirect after success
-      setTimeout(() => {
-        navigate("/Job-portal/employer/login/forgotpassword/createpassword");
-      }, 2000);
-    } catch (err) {
-      setErrors({
-        email:
-          err.response?.data?.error ||
-          err.response?.data?.email ||
-          "Something went wrong",
-      });
-    } finally {
-      setLoading(false);
+  async function handleSubmit() {
+    if (!validateForm()) {
+      return false // stops form submit if errors
     }
-  };
+    try {
+      const res = await api.post('auth/forgot-password/',formValues)
+      alert(res.data.message)
+      // navigate("/Job-portal/employer/login/forgotpassword/createpassword") it should not redirect to create new password page, user gets create new pass from mail
+    } catch (error) {
+     const message = error.response?.data?.email?.[0];
+     alert(message)
+    }
+  }
 
   return (
     <div className="j-forgot-password-page">
       <header className="j-forgot-password-header">
         <Link to="/Job-portal" className="logo">
-          <span className="logo-text">job portal</span>
-          <span className='subtext'>for Employers</span>
+          <span className="logo-text">Job portal</span>
+          <span className='subtext'>For Employers</span>
         </Link>
         <div className="j-forgot-password-header-links">
           <span className='no-account'>Don't have an account?</span>

@@ -275,67 +275,36 @@ class WorkExperienceEntry(models.Model):
         return f"{self.job_title} @ {self.company_name}"
 
 
-from django.db import models
-from django.core.exceptions import ValidationError
-
 class Skill(models.Model):
     profile = models.ForeignKey(JobSeekerProfile, on_delete=models.CASCADE, related_name='skills')
     name = models.CharField(max_length=100)
 
     class Meta:
-        # Case-sensitive unique constraint
-        constraints = [
-            models.UniqueConstraint(
-                fields=['profile', 'name'],
-                name='unique_skill_per_profile'
-            )
-        ]
-        ordering = ['name']
-
-    def clean(self):
-        if self.name:
-            self.name = self.name.strip()
-
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
+        unique_together = ['profile', 'name']
 
     def __str__(self):
         return self.name
 
 
 class LanguageKnown(models.Model):
-    PROFICIENCY_CHOICES = (
-        ('Beginner', 'Beginner'),
-        ('Intermediate', 'Intermediate'),
-        ('Fluent', 'Fluent'),
-        ('Native', 'Native'),
-    )
-
     profile = models.ForeignKey(JobSeekerProfile, on_delete=models.CASCADE, related_name='languages')
     name = models.CharField(max_length=100)
-    proficiency = models.CharField(max_length=50, choices=PROFICIENCY_CHOICES)
+    proficiency = models.CharField(
+        max_length=50,
+        choices=(
+            ('Beginner', 'Beginner'),
+            ('Intermediate', 'Intermediate'),
+            ('Fluent', 'Fluent'),
+            ('Native', 'Native'),
+        )
+    )
 
     class Meta:
-        # Case-sensitive unique constraint
-        constraints = [
-            models.UniqueConstraint(
-                fields=['profile', 'name'],
-                name='unique_language_per_profile'
-            )
-        ]
-        ordering = ['name']
-
-    def clean(self):
-        if self.name:
-            self.name = self.name.strip()
-
-    def save(self, *args, **kwargs):
-        self.clean()
-        super().save(*args, **kwargs)
+        unique_together = ['profile', 'name']
 
     def __str__(self):
         return f"{self.name} ({self.proficiency})"
+
 
 class Certification(models.Model):
     profile = models.ForeignKey(JobSeekerProfile, on_delete=models.CASCADE, related_name='certifications')
@@ -351,25 +320,12 @@ class Certification(models.Model):
 
 class EmployerProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='employer_profile')
-
     full_name = models.CharField(max_length=200, blank=True)
     employee_id = models.CharField(max_length=50, blank=True, unique=True, null=True)
-
-    # Changed from Company to CompanyProfile
-    company = models.ForeignKey(
-        'CompanyProfile',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='employers'
-    )
-
+   
+    company = models.ForeignKey('CompanyProfile', on_delete=models.SET_NULL, null=True, blank=True, related_name='employers')  
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        company_str = self.company.company_name if self.company else "No Company"
-        return f"Employer: {self.full_name or self.user.email} - {company_str}"
 
 
 # Post a Job Model (Main Job Model)
@@ -684,52 +640,54 @@ class CompanyVerification(models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
     )
-
+ 
     employer = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="company_verification"
     )
-
+ 
     legal_name = models.CharField(max_length=255)
-    registration_number = models.CharField(max_length=255, unique=True)
-    tax_id = models.CharField(max_length=255, unique=True)
+    registration_number = models.CharField(max_length=255)  # REMOVED unique=True
+    tax_id = models.CharField(max_length=255)  # REMOVED unique=True
     website_url = models.URLField()
     official_email = models.EmailField()
     phone_number = models.CharField(max_length=20)
     incorporation_certificate = models.FileField(
         upload_to="company_certificates/"
     )
-
+ 
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
         default="pending",
         db_index=True
     )
-
+ 
     created_at = models.DateTimeField(auto_now_add=True)
-
+ 
     class Meta:
         ordering = ['-created_at']
-
+        # Add a unique constraint for employer + legal_name instead
+        unique_together = ['employer', 'legal_name']  # Each employer can only verify one company
+ 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         previous_status = None
-
+ 
         if not is_new:
             previous_status = CompanyVerification.objects.get(pk=self.pk).status
-
+ 
         super().save(*args, **kwargs)
-
+ 
         if self.status == "approved" and previous_status != "approved":
             employer_profile = self.employer.employer_profile
-            # Changed from Company to CompanyProfile
+           
+            # Find or create company profile
             company_profile, created = CompanyProfile.objects.get_or_create(
                 company_name=self.legal_name,
-                website=self.website_url,
                 defaults={
-                    'user': self.employer,
+                    'website': self.website_url,
                     'company_moto': '',
                     'contact_person': employer_profile.full_name or '',
                     'contact_number': self.phone_number,
@@ -737,40 +695,44 @@ class CompanyVerification(models.Model):
                     'company_size': '',
                     'address1': '',
                     'about': '',
-                    'company_logo': None
+                    'company_logo': None,
+                    'created_by': self.employer
                 }
             )
+           
+            # If company already exists, update with latest info if needed
+            if not created:
+                # Optionally update company details
+                pass
+           
+            # Link employer to company
             if not employer_profile.company:
                 employer_profile.company = company_profile
                 employer_profile.save()
-
+ 
     def __str__(self):
         return self.legal_name
-
-
+ 
+ 
 # About Company
-
+ 
 class CompanyProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-
+ 
     company_name = models.CharField(max_length=255)
     company_moto = models.CharField(max_length=255)
     contact_person = models.CharField(max_length=255)
     contact_number = models.CharField(max_length=15)
     company_email = models.EmailField()
     website = models.URLField()
-
     company_size = models.CharField(max_length=100)
-
     address1 = models.TextField()
     address2 = models.TextField(blank=True, null=True)
-
     about = models.TextField()
-
     company_logo = models.ImageField(upload_to='company_logos/')
-
     created_at = models.DateTimeField(auto_now_add=True)
-
+       
+    created_by = models.ForeignKey(User,on_delete=models.SET_NULL,null=True, blank=True,related_name='companies_created')
+   
     def __str__(self):
         return self.company_name
 
@@ -993,3 +955,26 @@ class PaymentMethod(models.Model):
         if self.is_default:
             PaymentMethod.objects.filter(user=self.user).update(is_default=False)
         super().save(*args, **kwargs)
+
+# Company Email OTP
+
+class CompanyEmailOTP(models.Model):
+    PURPOSE_CHOICES = (
+        ('company_verification', 'Company Verification'),
+        ('company_email_change', 'Company Email Change'),
+    )
+    
+    company_name = models.CharField(max_length=255, null=True, blank=True)
+    email = models.EmailField()
+    otp = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=30, choices=PURPOSE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_verified = models.BooleanField(default=False)
+    
+    def is_valid(self):
+        from django.utils import timezone
+        return timezone.now() < self.expires_at and not self.is_verified
+    
+    def __str__(self):
+        return f"OTP for {self.email} - {self.purpose}"        

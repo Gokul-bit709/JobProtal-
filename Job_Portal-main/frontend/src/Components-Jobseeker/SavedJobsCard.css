@@ -7,6 +7,7 @@
   display: flex;
   flex-direction: column;
   height: min-content;
+  cursor: pointer;
 }
 
 .myjobs-card-header {
@@ -58,5 +59,29 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 16px;
+}
+
+.Opportunities-job-type {
+    font-weight: 600;
+    font-size: 14px;
+}
+ 
+ 
+.Opportunities-job-type.full-time {
+    color: #1E88E5;
+}
+ 
+ 
+.Opportunities-job-type.internship {
+    color: #f7931a;
+}
+ 
+ 
+.Opportunities-job-type.part-time {
+    color: #2e7d32;
+}
+ 
+.Opportunities-job-type.contract {
+    color: #7b1fa2;
 }
 

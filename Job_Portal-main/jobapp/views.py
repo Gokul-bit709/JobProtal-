@@ -64,10 +64,10 @@ from .models import (
     Conversation, Message, ChatMessage, HelpTopic, RaiseTicket,
     PasswordResetToken, EmailOTP, NewsletterSubscriber,
     CompanyVerification, CompanyProfile, Complaint, Plan, Subscription,
-    Invoice, PaymentMethod,
+    Invoice, PaymentMethod,CompanyEmailOTP,
 )
 from .permissions import IsAdminOrEmployer, IsEmployerOrAdmin, IsJobSeeker, IsAdminUserType
-from .utils import generate_otp, generate_4digit_otp, send_email_otp, generate_token, send_password_reset_email
+from .utils import generate_otp, generate_4digit_otp, send_email_otp, generate_token, send_password_reset_email,generate_company_otp, send_company_email_otp
 
 User = get_user_model()
 
@@ -1107,43 +1107,52 @@ class ForgotPasswordView(APIView):
 
 class ResetPasswordConfirmView(APIView):
     permission_classes = [AllowAny]
- 
+
     def post(self, request):
         serializer = ResetPasswordConfirmSerializer(data=request.data)
-       
+
         if serializer.is_valid():
             token = serializer.validated_data['token']
             new_password = serializer.validated_data['new_password']
-           
+
             try:
-                reset_token = PasswordResetToken.objects.get(token=token, is_used=False)
-               
+                reset_token = PasswordResetToken.objects.get(
+                    token=token,
+                    is_used=False
+                )
+
                 if not reset_token.is_valid():
                     return Response({
                         "error": "Token has expired."
-                    }, status=status.HTTP_400_BAD_REQUEST)
-               
+                    }, status=400)
+
                 user = reset_token.user
+
                 user.set_password(new_password)
+                user.is_active = True
+
+                if hasattr(user, "is_verified"):
+                    user.is_verified = True
+
                 user.save()
-               
+
                 reset_token.is_used = True
                 reset_token.save()
-               
+
                 refresh = RefreshToken.for_user(user)
-               
+
                 return Response({
                     "message": "Password has been reset successfully.",
                     "access": str(refresh.access_token),
                     "refresh": str(refresh)
-                }, status=status.HTTP_200_OK)
-               
+                }, status=200)
+
             except PasswordResetToken.DoesNotExist:
                 return Response({
                     "error": "Invalid or expired token."
-                }, status=status.HTTP_400_BAD_REQUEST)
-       
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                }, status=400)
+
+        return Response(serializer.errors, status=400)
  
 
 class CreatePasswordView(APIView):
@@ -1325,7 +1334,11 @@ class SubmitCompanyVerification(APIView):
                 "error": "You already submitted verification"
             })
  
-        serializer = CompanyVerificationSerializer(data=request.data)
+        # ✅ Pass the request context to serializer
+        serializer = CompanyVerificationSerializer(
+            data=request.data,
+            context={'request': request}
+        )
  
         if serializer.is_valid():
             serializer.save(employer=request.user)
@@ -1359,104 +1372,236 @@ class CompanyVerificationAction(APIView):
             "message": f"Company {status_value} successfully"
         })
 
-
 # ============ COMPANY PROFILE VIEWS ============
-
+ 
 class CompanyProfileCreateView(APIView):
     permission_classes = [IsEmployerOrAdmin]
- 
+
     def post(self, request):
-        if CompanyProfile.objects.filter(user=request.user).exists():
-            return Response({"error": "Profile already exists"}, status=400)
- 
-        serializer = CompanyProfileSerializer(
-            data=request.data,
-            context={'request': request}
-        )
- 
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "Created successfully"})
- 
-        return Response(serializer.errors, status=400)
- 
-
-class CompanyProfileDetailView(APIView):
-    permission_classes = [IsEmployerOrAdmin]
-
-    def get(self, request):
-        try:
-            profile = CompanyProfile.objects.get(user=request.user)
-
-            serializer = CompanyProfileSerializer(
-                profile,
-                context={'request': request}
+        # Check if employer already has a company
+        if hasattr(request.user, 'employer_profile') and request.user.employer_profile.company:
+            return Response(
+                {"error": "You are already linked to a company"}, 
+                status=400
             )
 
-            return Response(serializer.data)
+        # Check for duplicate company name
+        company_name = request.data.get('company_name')
+        existing_company = CompanyProfile.objects.filter(company_name__iexact=company_name).first()
 
-        except CompanyProfile.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
- 
+        if existing_company:
+            # ✅ Return 400 error to trigger popup in frontend
+            return Response(
+                {"error": f"A company with the name '{company_name}' already exists. Please use a different name."}, 
+                status=400
+            )
 
-class CompanyProfileUpdateView(APIView):
-    permission_classes = [IsEmployerOrAdmin]
- 
-    def patch(self, request):
-        try:
-            profile = CompanyProfile.objects.get(user=request.user)
-        except CompanyProfile.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
- 
+        # Create new company
         serializer = CompanyProfileSerializer(
-            profile,
             data=request.data,
-            partial=True,
             context={'request': request}
         )
 
         if serializer.is_valid():
-            serializer.save()
-            return Response({
-                "message": "Profile updated successfully",
-                "data": serializer.data
-            }, status=200)
-        
-        return Response(serializer.errors, status=400)
-    
-class CompanyProfileListView(APIView):
-    permission_classes = [IsAuthenticated]
+            company = serializer.save()
 
+            if hasattr(request.user, 'employer_profile'):
+                request.user.employer_profile.company = company
+                request.user.employer_profile.save()
+
+            return Response({
+                "message": "Company profile created successfully",
+                "company_id": company.id,
+                "company_name": company.company_name,
+                "is_existing": False
+            }, status=201)
+
+        return Response(serializer.errors, status=400)
+ 
+class CompanyProfileDetailView(APIView):
+
+    permission_classes = [IsEmployerOrAdmin]
+ 
     def get(self, request):
+
+        # ✅ Get company through employer profile instead of user field
+
+        if not hasattr(request.user, 'employer_profile'):
+
+            return Response({"error": "Employer profile not found"}, status=404)
+
+        company = request.user.employer_profile.company
+
+        if not company:
+
+            return Response({"error": "No company linked to this employer"}, status=404)
+ 
+        serializer = CompanyProfileSerializer(
+
+            company,
+
+            context={'request': request}
+
+        )
+ 
+        return Response(serializer.data)
+
+ 
+class CompanyProfileUpdateView(APIView):
+
+    permission_classes = [IsEmployerOrAdmin]
+
+    def patch(self, request):
+
+        # ✅ Get company through employer profile
+
+        if not hasattr(request.user, 'employer_profile'):
+
+            return Response({"error": "Employer profile not found"}, status=404)
+
+        company = request.user.employer_profile.company
+
+        if not company:
+
+            return Response({"error": "No company linked to this employer"}, status=404)
+
+        serializer = CompanyProfileSerializer(
+
+            company,
+
+            data=request.data,
+
+            partial=True,
+
+            context={'request': request}
+
+        )
+ 
+        if serializer.is_valid():
+
+            serializer.save()
+
+            return Response({
+
+                "message": "Profile updated successfully",
+
+                "data": serializer.data
+
+            }, status=200)
+
+        return Response(serializer.errors, status=400)
+
+ 
+class CompanyProfileListView(APIView):
+
+    permission_classes = [IsAuthenticated]
+ 
+    def get(self, request):
+
         companies = CompanyProfile.objects.all().order_by('-created_at')
 
+        # ✅ If employer, only show their company (optional security)
+
+        if request.user.user_type == 'employer' and hasattr(request.user, 'employer_profile'):
+
+            if request.user.employer_profile.company:
+
+                companies = companies.filter(id=request.user.employer_profile.company.id)
+ 
         serializer = CompanyProfileSerializer(
+
             companies,
+
             many=True,
+
             context={'request': request}
+
         )
-
+ 
         return Response(serializer.data, status=200)
-
+ 
+ 
 class CompanyProfileByIdView(APIView):
-    permission_classes = [IsAuthenticated]
 
+    permission_classes = [IsAuthenticated]
+ 
     def get(self, request, company_id):
+
         try:
+
             company = CompanyProfile.objects.get(id=company_id)
 
+            # ✅ Security check for employers - they can only view their own company
+
+            if request.user.user_type == 'employer':
+
+                if hasattr(request.user, 'employer_profile'):
+
+                    if request.user.employer_profile.company_id != company_id:
+
+                        return Response(
+
+                            {"error": "You don't have permission to view this company"}, 
+
+                            status=403
+
+                        )
+ 
             serializer = CompanyProfileSerializer(
+
                 company,
+
                 context={'request': request}
+
             )
-
+ 
             return Response(serializer.data, status=200)
-
+ 
         except CompanyProfile.DoesNotExist:
+
             return Response(
+
                 {"error": "Company not found"},
+
                 status=404
-            )        
+
+            )
+        
+class LinkToExistingCompanyView(APIView):
+    permission_classes = [IsEmployerOrAdmin]
+    
+    def post(self, request):
+        company_name = request.data.get('company_name')
+        
+        if not company_name:
+            return Response({"error": "Company name is required"}, status=400)
+        
+        # Find existing company (case-insensitive)
+        company = CompanyProfile.objects.filter(company_name__iexact=company_name).first()
+        
+        if not company:
+            return Response({"error": "Company not found. Please create a new company."}, status=404)
+        
+        # Check if employer already has a company
+        if hasattr(request.user, 'employer_profile') and request.user.employer_profile.company:
+            return Response({
+                "error": f"You are already linked to company: {request.user.employer_profile.company.company_name}"
+            }, status=400)
+        
+        # Link employer to existing company
+        if hasattr(request.user, 'employer_profile'):
+            request.user.employer_profile.company = company
+            request.user.employer_profile.save()
+            
+            return Response({
+                "message": f"Successfully linked to existing company: {company.company_name}",
+                "company_id": company.id,
+                "company_name": company.company_name,
+                "is_existing": True
+            }, status=200)
+        
+        return Response({"error": "Employer profile not found"}, status=400)        
+ 
     
 
 # ============ OTP VIEWS ============
@@ -1800,3 +1945,275 @@ class VerifyPaymentView(APIView):
         )
 
         return Response({"message": "Payment verified successfully"})
+    
+# ============ COMPANY EMAIL OTP VIEWS ============
+
+class SendCompanyEmailOTPView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        email = request.data.get("email")
+        company_name = request.data.get("company_name")
+        
+        if not email:
+            return Response({"error": "Email is required"}, status=400)
+        
+        if not company_name:
+            return Response({"error": "Company name is required"}, status=400)
+        
+        # Check if email is already used by another company
+        if CompanyProfile.objects.filter(company_email=email).exists():
+            # If updating existing company, check if it's the same company
+            if hasattr(request.user, 'employer_profile') and request.user.employer_profile.company:
+                existing_company = request.user.employer_profile.company
+                if existing_company.company_email != email:
+                    return Response(
+                        {"error": "This email is already used by another company"}, 
+                        status=400
+                    )
+            else:
+                return Response(
+                    {"error": "This email is already registered with another company"}, 
+                    status=400
+                )
+        
+        # Delete existing OTPs for this email
+        CompanyEmailOTP.objects.filter(
+            email=email,
+            purpose='company_verification',
+            is_verified=False
+        ).delete()
+        
+        otp = generate_company_otp()
+        
+        CompanyEmailOTP.objects.create(
+            company_name=company_name,
+            email=email,
+            otp=otp,
+            purpose='company_verification',
+            expires_at=timezone.now() + timedelta(minutes=10)
+        )
+        
+        # Send OTP email
+        try:
+            send_company_email_otp(email, otp, company_name)
+            print(f"📧 Company OTP sent to {email}: {otp}")  # For testing
+            return Response({
+                "message": "OTP sent to company email successfully",
+                "email": email
+            }, status=200)
+        except Exception as e:
+            return Response({
+                "error": f"Failed to send OTP: {str(e)}"
+            }, status=500)
+
+
+class VerifyCompanyEmailOTPView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        email = request.data.get("email")
+        otp = request.data.get("otp")
+        
+        if not email or not otp:
+            return Response({"error": "Email and OTP are required"}, status=400)
+        
+        otp_obj = CompanyEmailOTP.objects.filter(
+            email=email,
+            otp=otp,
+            purpose='company_verification',
+            is_verified=False
+        ).last()
+        
+        if not otp_obj or not otp_obj.is_valid():
+            return Response({"error": "Invalid or expired OTP"}, status=400)
+        
+        # Mark OTP as verified
+        otp_obj.is_verified = True
+        otp_obj.save()
+        
+        return Response({
+            "message": "Email verified successfully",
+            "verified": True
+        }, status=200)    
+
+
+class EmployerOnboardingStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if user.user_type != "employer":
+            return Response(
+                {"error": "Only employers allowed"},
+                status=403
+            )
+
+        # ==================================
+        # CORRECT COMPANY PROFILE CHECK
+        # ==================================
+        has_company_profile = False
+
+        if hasattr(user, "employer_profile"):
+            has_company_profile = (
+                user.employer_profile.company is not None
+            )
+
+        # ==================================
+        # VERIFICATION CHECK
+        # ==================================
+        verification = CompanyVerification.objects.filter(
+            employer=user
+        ).order_by("-id").first()
+
+        has_verification = verification is not None
+
+        verification_status = (
+            verification.status
+            if verification
+            else None
+        )
+
+        return Response({
+            "has_company_profile": has_company_profile,
+            "has_verification": has_verification,
+            "verification_status": verification_status
+        })
+    
+# Google Login    
+    
+# Add these imports at top of views.py
+
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from django.conf import settings
+from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from .models import User, JobSeekerProfile, EmployerProfile
+
+
+# Update your GoogleLoginView to this:
+
+class GoogleLoginView(APIView):
+    """
+    Google Login API
+    POST /api/google-login/ 
+    Request body: {"id_token": "google_id_token"} or {"access_token": "google_access_token"}
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        from django.conf import settings
+        from rest_framework_simplejwt.tokens import RefreshToken
+        
+        # Try to get token from different possible field names
+        id_token_str = request.data.get('id_token') or request.data.get('access_token') or request.data.get('token')
+        
+        if not id_token_str:
+            return Response(
+                {"error": "Google token required. Please provide 'id_token' or 'access_token'"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Get Google Client ID from settings
+            google_client_id = getattr(settings, 'GOOGLE_CLIENT_ID', None)
+            
+            if not google_client_id:
+                return Response(
+                    {"error": "Google Client ID not configured in settings"},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            print(f"Using Google Client ID: {google_client_id}")
+            print(f"Token received: {id_token_str[:50]}...")
+            
+            # Verify Google ID token
+            info = id_token.verify_oauth2_token(
+                id_token_str,
+                google_requests.Request(),
+                google_client_id
+            )
+            
+            # Extract user info
+            email = info.get('email')
+            name = info.get('name', '')
+            
+            if not email:
+                return Response(
+                    {"error": "Email not provided by Google"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get or create user
+            user = User.objects.filter(email=email).first()
+            is_new_user = False
+            
+            if not user:
+                # Create username from email
+                username = email.split('@')[0]
+                base_username = username
+                counter = 1
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+                
+                # Create new user
+                user = User.objects.create(
+                    username=username,
+                    email=email,
+                    user_type=User.UserType.JOBSEEKER,
+                    is_active=True
+                )
+                user.set_unusable_password()
+                user.save()
+                
+                # Create jobseeker profile if the model exists
+                try:
+                    if not hasattr(user, 'jobseeker_profile'):
+                        JobSeekerProfile.objects.create(
+                            user=user,
+                            full_name=name
+                        )
+                except Exception as e:
+                    print(f"Could not create profile: {e}")
+                
+                is_new_user = True
+            
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            
+            return Response({
+                'success': True,
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'username': user.username,
+                    'user_type': user.user_type,
+                },
+                'is_new_user': is_new_user
+            }, status=status.HTTP_200_OK)
+            
+        except ValueError as e:
+            error_msg = str(e)
+            print(f"Token verification error: {error_msg}")
+            return Response(
+                {"error": f"Invalid Google token: {error_msg}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            print(f"Unexpected error: {str(e)}")
+            return Response(
+                {"error": f"Authentication failed: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        

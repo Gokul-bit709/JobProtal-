@@ -68,3 +68,8 @@ daphne==4.1.2
 drf-yasg==1.21.7
 Flask==3.0.3
 drf-writable-nested==0.7.0
+google-auth==2.49.2
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
+reportlab==4.1.0
+razorpay==1.4.1 i need like this

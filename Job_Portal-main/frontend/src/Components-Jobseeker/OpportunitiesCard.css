@@ -68,6 +68,7 @@
 .Opportunities-detail-line {
   display: flex;
   align-items: center;
+  margin-top: 10px;
 }
 
 .Opportunities-divider {
@@ -122,11 +123,6 @@
   font-size: 16px;
 }
 
-.Opportunities-save-btn:hover {
-  background: #1E88E5;
-  color: #fff;
-}
-
 .Opportunities-apply-btn {
   background: #1E88E5;
   color: white;
@@ -135,12 +131,6 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 16px;
-}
-
-.Opportunities-apply-btn:hover {
-  background: #fff;
-  border: 1px solid #ccc;
-  color: #1E88E5;
 }
 
 .Opportunities-separator {

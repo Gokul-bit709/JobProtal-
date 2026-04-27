@@ -288,46 +288,6 @@ class JobSeekerProfileAdmin(admin.ModelAdmin):
     ]
 
 
-# -------------------------
-# COMPANY PROFILE ADMIN
-# -------------------------
-
-@admin.register(CompanyProfile)
-class CompanyProfileAdmin(admin.ModelAdmin):
-    list_display = (
-        'company_name',
-        'user',
-        'contact_person',
-        'company_email',
-        'company_size',
-        'created_at'
-    )
-    search_fields = (
-        'company_name',
-        'contact_person',
-        'company_email'
-    )
-    list_filter = ('company_size', 'created_at')
-    readonly_fields = ('created_at',)
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('user', 'company_name', 'company_moto', 'company_logo')
-        }),
-        ('Contact Information', {
-            'fields': ('contact_person', 'contact_number', 'company_email', 'website')
-        }),
-        ('Address', {
-            'fields': ('address1', 'address2')
-        }),
-        ('Company Details', {
-            'fields': ('company_size', 'about')
-        }),
-        ('Meta', {
-            'fields': ('created_at',)
-        }),
-    )
-
 
 # -------------------------
 # COMPLAINT ADMIN
@@ -360,3 +320,39 @@ class ComplaintAdmin(admin.ModelAdmin):
 
     full_name.short_description = "Full Name"
     full_name.admin_order_field = 'first_name'
+
+class EmployerInline(admin.TabularInline):
+        model = EmployerProfile
+        extra = 0
+        fields = ('user', 'full_name', 'employee_id')
+        readonly_fields = ('created_at', 'updated_at')
+ 
+@admin.register(CompanyProfile)
+class CompanyProfileAdmin(admin.ModelAdmin):
+        list_display = ('company_name', 'contact_person', 'company_email', 'company_size', 'employers_count', 'created_at')
+        search_fields = ('company_name', 'contact_person', 'company_email')
+        list_filter = ('company_size', 'created_at')
+        readonly_fields = ('created_at',)
+        inlines = [EmployerInline]  # Show all employers linked to this company
+       
+        def employers_count(self, obj):
+            return obj.employers.count()
+        employers_count.short_description = 'Number of Employers'
+       
+        fieldsets = (
+            ('Basic Information', {
+                'fields': ('company_name', 'company_moto', 'company_logo', 'created_by')
+            }),
+            ('Contact Information', {
+                'fields': ('contact_person', 'contact_number', 'company_email', 'website')
+            }),
+            ('Address', {
+                'fields': ('address1', 'address2')
+            }),
+            ('Company Details', {
+                'fields': ('company_size', 'about')
+            }),
+            ('Meta', {
+                'fields': ('created_at',)
+            }),
+        )  

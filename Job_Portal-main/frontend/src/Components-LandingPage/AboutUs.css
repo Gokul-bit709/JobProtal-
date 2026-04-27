@@ -29,14 +29,14 @@
 .Aboutus-Desc-Container h1{
     margin-bottom: 50px;
 }
-
+ 
 .Aboutus-Desc-Container p{
     font-size: 22px;
     font-weight: 500;
     margin-top: -7px;
     text-align: justify;
 }
-
+ 
 .Aboutus-Image-Container{
     /* background-color: rebeccapurple; */
     display: flex;
@@ -50,10 +50,9 @@
     /* border-radius: 50px; */
     border-top-right-radius: 10px;
     border-bottom-right-radius: 10px;
-    
 }
-
-
+ 
+ 
 .Aboutus-Types{
     display: grid;
     grid-template-columns: repeat(3,1fr);
@@ -61,7 +60,6 @@
     padding: 25px;
     justify-items: center;
     justify-content: center;
-    
 }
 .Aboutus-types-Images{
     width: 250px;
@@ -82,12 +80,11 @@
     text-align: center;
     margin-top: 50px;
     font-size: larger;
-   
 } 
 .Aboutus-TypeDesc p{
     font-weight: 300;
-} 
-
+}
+ 
 .Aboutus-Midsec{
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -107,26 +104,24 @@
     /* padding: 5px; */
     border-radius: 7px;
     padding-right: 25px;
-    
 }
 .Aboutus-Midsec-Desc-Container h1{
-    margin-bottom: 50px;
-    text-align: end;
+    margin-bottom: 25px;
+    text-align: left;
     /* padding-right:20px; */
-    
 
+ 
 }
-
+ 
 .Aboutus-Midsec-Desc-Container p{
     font-size: 22px;
     font-weight: 500;
-    margin-top: -10px;
-    text-align: end;
-
+    margin-top: 0;
+    text-align: left;
+    line-height: 1.6;
 }
 .Aboutus-midseccontent{
-    width: 520px;
-    height:350px;
+    max-width: 520px;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -136,8 +131,7 @@
     width: 500px;
     border-top-left-radius: 10px;
     border-bottom-left-radius: 10px;
-    
-    
+
 } 
 .Aboutus-final-part{
     display: flex;
@@ -159,7 +153,6 @@
     align-items: center;
     padding: 50px;
     line-height: 1.25;
-    
 } 
 .Aboutus-final-Desc-Container p{
     text-align: justify;
