@@ -978,3 +978,13 @@ class CompanyEmailOTP(models.Model):
     
     def __str__(self):
         return f"OTP for {self.email} - {self.purpose}"        
+    
+from django.db import models
+ 
+class Employer(models.Model):
+    username = models.EmailField(unique=True)
+    phone = models.CharField(max_length=10)
+    password = models.CharField(max_length=255)
+ 
+    def __str__(self):
+        return self.username

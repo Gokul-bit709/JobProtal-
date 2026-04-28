@@ -70,6 +70,7 @@ from .views import (
     SendCompanyEmailOTPView,
     EmployerOnboardingStatusView,
     GoogleLoginView,
+    login_view,
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
 )
@@ -220,4 +221,6 @@ urlpatterns = [
 
     # Google Login
     path("google-login/", GoogleLoginView.as_view()),
+    # admin login
+    path('login/', login_view),
 ]

@@ -2216,4 +2216,26 @@ class GoogleLoginView(APIView):
                 {"error": f"Authentication failed: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+    
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Employer
+ 
+@api_view(['POST'])
+def login_view(request):
+    username = request.data.get('username')
+    phone = request.data.get('phone')
+    password = request.data.get('password')
+ 
+    try:
+        user = Employer.objects.get(username=username, phone=phone, password=password)
+        return Response({
+            "status": "success",
+            "message": "Login successful",
+            "user_id": user.id
+        })
+    except Employer.DoesNotExist:
+        return Response({
+            "status": "error",
+            "message": "Invalid credentials"
+        })
