@@ -2218,28 +2218,7 @@ class GoogleLoginView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
     
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .models import Employer
  
-@api_view(['POST'])
-def login_view(request):
-    username = request.data.get('username')
-    phone = request.data.get('phone')
-    password = request.data.get('password')
- 
-    try:
-        user = Employer.objects.get(username=username, phone=phone, password=password)
-        return Response({
-            "status": "success",
-            "message": "Login successful",
-            "user_id": user.id
-        })
-    except Employer.DoesNotExist:
-        return Response({
-            "status": "error",
-            "message": "Invalid credentials"
-        })
     
 
 from rest_framework.permissions import BasePermission
@@ -2418,4 +2397,73 @@ class UpdateCompanyStatusView(APIView):
         })
    
  
+#admin
+
+class AdminLoginView(APIView):
+    """
+    Admin-specific login.
+    Accepts: { "email": "...", "password": "..." }
+    Returns: { access, refresh, user: { id, email, username, user_type } }
+    Only allows users with user_type == 'admin'.
+    """
+    permission_classes = [AllowAny]
  
+    def post(self, request):
+        email    = request.data.get('email', '').strip()
+        password = request.data.get('password', '').strip()
+ 
+        # ── Field-level validation ──────────────────────────
+        errors = {}
+        if not email:
+            errors['email'] = 'Email is required.'
+        if not password:
+            errors['password'] = 'Password is required.'
+        if errors:
+            return Response({'success': False, 'errors': errors},
+                            status=status.HTTP_400_BAD_REQUEST)
+ 
+        # ── Find user by email ──────────────────────────────
+        try:
+            user = User.objects.get(email__iexact=email)
+        except User.DoesNotExist:
+            return Response(
+                {'success': False, 'errors': {'email': 'No account found with this email.'}},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+ 
+        # ── Check it's an admin account ─────────────────────
+        if user.user_type != 'admin':
+            return Response(
+                {'success': False, 'errors': {'email': 'This account does not have admin access.'}},
+                status=status.HTTP_403_FORBIDDEN
+            )
+ 
+        # ── Check password ──────────────────────────────────
+        if not user.check_password(password):
+            return Response(
+                {'success': False, 'errors': {'password': 'Incorrect password.'}},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+ 
+        # ── Check active ────────────────────────────────────
+        if not user.is_active:
+            return Response(
+                {'success': False, 'errors': {'email': 'This account is disabled.'}},
+                status=status.HTTP_403_FORBIDDEN
+            )
+ 
+        # ── Generate JWT tokens ─────────────────────────────
+        refresh = RefreshToken.for_user(user)
+ 
+        return Response({
+            'success': True,
+            'message': 'Admin login successful.',
+            'access':  str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': {
+                'id':        user.id,
+                'email':     user.email,
+                'username':  user.username,
+                'user_type': user.user_type,
+            }
+        }, status=status.HTTP_200_OK)

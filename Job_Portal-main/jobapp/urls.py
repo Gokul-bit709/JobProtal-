@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     AdminCompanyListView,
+    AdminLoginView,
     AdminUpdateComplaintView,
     CompanyProfileCreateView,
     DashboardView,
@@ -73,7 +74,7 @@ from .views import (
     SendCompanyEmailOTPView,
     EmployerOnboardingStatusView,
     GoogleLoginView,
-    login_view,
+    
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
 )
@@ -225,7 +226,7 @@ urlpatterns = [
     # Google Login
     path("google-login/", GoogleLoginView.as_view()),
     # admin login
-    path('login/', login_view),
+    path('admin-login/', AdminLoginView.as_view(), name='admin-login'),
     #admin 
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('company/', AdminCompanyListView.as_view(), name='dashboardlist'),
