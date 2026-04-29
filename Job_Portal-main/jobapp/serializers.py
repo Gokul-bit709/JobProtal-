@@ -1491,4 +1491,95 @@ class AdminCompanySerializer(serializers.ModelSerializer):
  
     def get_name(self, obj):
         return obj.legal_name
+
+
+
+#UserManagement Serializers
+
+
+ 
+class UserListSerializer(serializers.ModelSerializer):
    
+    role = serializers.SerializerMethodField()
+    profile = serializers.SerializerMethodField()
+    contact = serializers.SerializerMethodField()
+    joinDate = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = User
+        fields = ['id', 'role', 'status', 'joinDate', 'profile', 'contact']
+ 
+    def get_role(self, obj):
+        if obj.user_type == User.UserType.EMPLOYER:
+            return "employer"
+        return "candidate"  
+ 
+    def get_profile(self, obj):
+        full_name = ""
+ 
+        if obj.user_type == User.UserType.JOBSEEKER:
+            try:
+                full_name = obj.jobseeker_profile.full_name
+            except JobSeekerProfile.DoesNotExist:
+                full_name = obj.username
+ 
+        elif obj.user_type == User.UserType.EMPLOYER:
+            try:
+                full_name = obj.employer_profile.full_name
+            except EmployerProfile.DoesNotExist:
+                full_name = obj.username
+ 
+        elif obj.user_type == User.UserType.ADMIN:
+            full_name = obj.get_full_name() or obj.username
+ 
+        return {"fullName": full_name}
+ 
+    def get_contact(self, obj):
+        '''#city = ""
+        if obj.user_type == User.UserType.JOBSEEKER:
+            try:
+                city = obj.jobseeker_profile.city
+            except JobSeekerProfile.DoesNotExist:
+                pass'''
+        return {
+            "email": obj.email,
+            #"city": city
+        }
+ 
+    def get_joinDate(self, obj):
+        if obj.date_joined:
+            return obj.date_joined.strftime("%b %d, %Y")  # e.g., "Jan 10, 2024"
+        return None
+ 
+ 
+class UserStatusUpdateSerializer(serializers.ModelSerializer):
+ 
+    STATUS_TRANSITIONS = {
+        "Active": ["Hold", "Deactivated"],
+        "Hold": ["Active", "Deactivated"],
+        "Deactivated": ["Active", "Hold"],
+    }
+ 
+    class Meta:
+        model = User
+        fields = ['status']
+ 
+    def validate_status(self, value):
+        user = self.instance
+ 
+       
+        valid_choices = [c[0] for c in User.AccountStatus.choices]
+        if value not in valid_choices:
+            raise serializers.ValidationError("Invalid status")
+ 
+        # 🔹 transition check
+        allowed_transitions = self.STATUS_TRANSITIONS.get(user.status, [])
+ 
+        if value not in allowed_transitions:
+            raise serializers.ValidationError(
+                f"Cannot change from {user.status} to {value}. "
+                f"Allowed: {', '.join(allowed_transitions)}"
+            )
+ 
+        return value
+ 

@@ -10,11 +10,22 @@ class User(AbstractUser):
         ADMIN = 'admin', 'Admin'
         EMPLOYER = 'employer', 'Employer'
         JOBSEEKER = 'jobseeker', 'Jobseeker'
+    
+    class AccountStatus(models.TextChoices):  # newly added
+        ACTIVE = 'Active', 'Active'
+        HOLD = 'Hold', 'Hold'
+        DEACTIVATED = 'Deactivated', 'Deactivated'
+          
 
     user_type = models.CharField(max_length=10, choices=UserType.choices)
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=15, blank=True, null=True)
-
+    status = models.CharField(                          # ← NEW
+        max_length=15,
+        choices=AccountStatus.choices,
+        default=AccountStatus.ACTIVE
+    )
+    
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'user_type']
 
@@ -986,4 +997,3 @@ class CompanyEmailOTP(models.Model):
  
 
 
- 

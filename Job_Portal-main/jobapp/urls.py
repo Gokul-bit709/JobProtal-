@@ -18,6 +18,7 @@ from .views import (
     NewsletterSubscribeAPIView,
     SubmitComplaintView,
     UpdateCompanyStatusView,
+    UserListView,
     UserSettingsView,
     SaveJobView,
     JobApplicationDetailView,
@@ -31,6 +32,8 @@ from .views import (
     MarkMessageReadView,
     ChatUsersView,
     EmployerInitiateChatView,
+    UserStatsView,
+    UserStatusUpdateView,
     VerifyEmailOTPView,
     chat_api,
     ForgotPasswordView,
@@ -231,4 +234,8 @@ urlpatterns = [
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('company/', AdminCompanyListView.as_view(), name='dashboardlist'),
     path('company/<int:pk>/status/', UpdateCompanyStatusView.as_view(), name='update-company-status'),
+    #UserManagement
+    path('users/', UserListView.as_view(), name='user-list'),
+    path('users/<int:pk>/status/', UserStatusUpdateView.as_view(), name='user-status-update'),
+    path('users/stats/', UserStatsView.as_view(), name='user-stats'),
 ]

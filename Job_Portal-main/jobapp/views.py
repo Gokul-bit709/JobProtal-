@@ -2358,8 +2358,16 @@ class AdminCompanyListView(APIView):
         serializer = AdminCompanySerializer(queryset, many=True)
         return Response(serializer.data)
  
+ 
 class UpdateCompanyStatusView(APIView):
-    #permission_classes = [IsAuthenticated, IsAdminUserType] enable in prod
+ 
+    STATUS_TRANSITIONS = {
+        "Pending": ["Verified", "Reject", "Hold"],
+        "Hold": ["Verified", "Reject","Pending"],
+        "Reject": ["Pending","Hold","Verified"],
+        "Verified": ["Reject", "Hold","Pending"]
+    }
+ 
     def patch(self, request, pk):
         try:
             obj = CompanyVerification.objects.get(id=pk)
@@ -2369,33 +2377,46 @@ class UpdateCompanyStatusView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
  
-     
+        # 🔹 Only status allowed
         if set(request.data.keys()) != {"status"}:
             return Response(
                 {"error": "Only 'status' field is allowed"},
                 status=status.HTTP_400_BAD_REQUEST
             )
  
-        verification = request.data.get("status")
+        new_status = request.data.get("status")
  
         valid_values = [choice[0] for choice in CompanyVerification.STATUS_CHOICES]
  
-        if verification not in valid_values:
+        # 🔹 Validate value
+        if new_status not in valid_values:
             return Response(
                 {"error": f"Invalid value. Allowed: {valid_values}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
  
+        # 🔥 Transition check
+        allowed = self.STATUS_TRANSITIONS.get(obj.status, [])
+ 
+        if new_status not in allowed:
+            return Response(
+                {
+                    "error": f"Cannot change from {obj.status} to {new_status}",
+                    "allowed": allowed
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
         previous = obj.status
-        obj.status = verification  
+        obj.status = new_status
         obj.save()
  
         return Response({
             "message": "Updated successfully",
             "previous": previous,
-            "verification": obj.status
+            "current": obj.status
         })
-   
+ 
  
 #admin
 
@@ -2467,3 +2488,114 @@ class AdminLoginView(APIView):
                 'user_type': user.user_type,
             }
         }, status=status.HTTP_200_OK)
+    
+ 
+#user management
+ 
+ 
+class UserListView(APIView):
+ 
+    def get(self, request):
+        search = request.query_params.get('search', '').strip().lower()
+ 
+        # 🔹 Base queryset
+        users = User.objects.exclude(
+            user_type=User.UserType.ADMIN
+        ).select_related(
+            'jobseeker_profile',
+            'employer_profile'
+        ).order_by('-date_joined')
+ 
+        if search:
+       
+            users_name = users.filter(
+                Q(jobseeker_profile__full_name__icontains=search) |
+                Q(employer_profile__full_name__icontains=search)
+            )
+ 
+            if users_name.exists():
+                users = users_name
+ 
+            else:
+               
+                users_email = users.filter(email__icontains=search)
+ 
+                if users_email.exists():
+                    users = users_email
+ 
+                else:
+                   
+                    if search in ["candidate", "jobseeker"]:
+                        users = users.filter(user_type=User.UserType.JOBSEEKER)
+ 
+                    elif search == "employer":
+                        users = users.filter(user_type=User.UserType.EMPLOYER)
+ 
+                    else:
+                        users = users.none()  # nothing found
+ 
+       
+        serializer = UserListSerializer(users, many=True)
+ 
+        return Response(serializer.data, status=status.HTTP_200_OK)
+   
+ 
+class UserStatusUpdateView(APIView):
+ 
+    #permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def patch(self, request, pk):
+        try:
+            user = get_object_or_404(User, pk=pk)
+ 
+           
+            if 'status' not in request.data:
+                return Response(
+                    {"error": "Status field is required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+ 
+            serializer = UserStatusUpdateSerializer(
+                user, data=request.data, partial=True
+            )
+          #two option only show
+            if serializer.is_valid():
+                serializer.save()
+ 
+                return Response(
+                    {
+                        "message": f"User status updated to '{serializer.validated_data.get('status')}'",
+                        "id": user.id,
+                        "status": serializer.validated_data.get('status')
+                    },
+                    status=status.HTTP_200_OK
+                )
+ 
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+ 
+        except Exception as e:
+            return Response(
+                {
+                    "error": "Something went wrong",
+                    "details": str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+       
+ 
+ 
+class UserStatsView(APIView):
+   
+    #permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def get(self, request):
+        all_users = User.objects.all()
+ 
+        stats = all_users.aggregate(
+                totalUsers=Count('id'),
+                activeNow=Count('id', filter=Q(status=User.AccountStatus.ACTIVE)),
+                candidates=Count('id', filter=Q(user_type=User.UserType.JOBSEEKER)),
+                employers=Count('id', filter=Q(user_type=User.UserType.EMPLOYER)),
+            )
+        return Response(stats, status=status.HTTP_200_OK)
+ 
