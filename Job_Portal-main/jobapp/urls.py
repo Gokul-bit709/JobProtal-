@@ -230,7 +230,7 @@ urlpatterns = [
     path("google-login/", GoogleLoginView.as_view()),
     # admin login
     path('admin-login/', AdminLoginView.as_view(), name='admin-login'),
-    #admin 
+    #ActivityMonitor
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('company/', AdminCompanyListView.as_view(), name='dashboardlist'),
     path('company/<int:pk>/status/', UpdateCompanyStatusView.as_view(), name='update-company-status'),
