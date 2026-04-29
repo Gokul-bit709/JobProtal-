@@ -48,6 +48,7 @@ class JobSeekerProfile(models.Model):
     profile_photo = models.ImageField(upload_to='profile_photos/', null=True, blank=True)
 
     # Current / Professional Details (general fields only)
+    
     current_job_title = models.CharField(max_length=200, blank=True)
     current_company = models.CharField(max_length=200, blank=True)
     total_experience_years = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
@@ -367,6 +368,7 @@ class PostAJob(models.Model):
     job_highlights = models.JSONField(default=list, blank=True)
     job_description = models.TextField()
     responsibilities = models.JSONField(default=list, blank=True)
+    last_date_to_apply = models.DateField( null=True, blank=True)
    
     job_status = models.CharField(
         max_length=50,
@@ -635,11 +637,12 @@ class ContactMessage(models.Model):
 # Company Verify
 
 class CompanyVerification(models.Model):
-    STATUS_CHOICES = (
-        ('pending', 'Pending'),
-        ('approved', 'Approved'),
-        ('rejected', 'Rejected'),
-    )
+    STATUS_CHOICES = [
+    ("Pending", "Pending"),
+    ("Hold", "Hold"),
+    ("Reject", "Reject"),
+    ("Verified", "Verified"),
+]
  
     employer = models.OneToOneField(
         settings.AUTH_USER_MODEL,

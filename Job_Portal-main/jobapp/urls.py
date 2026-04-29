@@ -1,8 +1,10 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
+    AdminCompanyListView,
     AdminUpdateComplaintView,
     CompanyProfileCreateView,
+    DashboardView,
     JobSeekerRegistrationView,
     EmployerRegistrationView,
     LoginView,
@@ -14,6 +16,7 @@ from .views import (
     ClearAllNotificationsView,
     NewsletterSubscribeAPIView,
     SubmitComplaintView,
+    UpdateCompanyStatusView,
     UserSettingsView,
     SaveJobView,
     JobApplicationDetailView,
@@ -223,4 +226,8 @@ urlpatterns = [
     path("google-login/", GoogleLoginView.as_view()),
     # admin login
     path('login/', login_view),
+    #admin 
+    path('dashboard/', DashboardView.as_view(), name='dashboard'),
+    path('company/', AdminCompanyListView.as_view(), name='dashboardlist'),
+    path('company/<int:pk>/status/', UpdateCompanyStatusView.as_view(), name='update-company-status'),
 ]

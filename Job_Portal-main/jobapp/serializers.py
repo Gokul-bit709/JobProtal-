@@ -1478,3 +1478,24 @@ class EmployerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employer
         fields = '__all__'
+    
+class AdminCompanySerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+    user = serializers.CharField(source='employer.username')
+    date = serializers.SerializerMethodField()
+    certificate = serializers.SerializerMethodField()
+    verification = serializers.CharField(source='get_status_display')
+ 
+    class Meta:
+        model = CompanyVerification
+        fields = ['id', 'name', 'user', 'date', 'certificate', 'verification']
+ 
+    def get_date(self, obj):
+        return obj.created_at.strftime("%d %B %Y")
+ 
+    def get_certificate(self, obj):
+        return "Yes" if obj.incorporation_certificate else "No"
+ 
+    def get_name(self, obj):
+        return obj.legal_name
+   

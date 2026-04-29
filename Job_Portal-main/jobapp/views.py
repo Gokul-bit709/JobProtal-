@@ -55,6 +55,7 @@ from .serializers import (
     SubscriptionSerializer,
     InvoiceSerializer,
     PaymentMethodSerializer,
+    AdminCompanySerializer,
 
 )
 
@@ -2239,3 +2240,182 @@ def login_view(request):
             "status": "error",
             "message": "Invalid credentials"
         })
+    
+
+from rest_framework.permissions import BasePermission
+class IsAdminUserType(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            request.user.is_authenticated and
+            request.user.user_type == 'admin'
+        )
+
+ 
+class DashboardView(APIView):
+ 
+    def get(self, request):
+        today = timezone.now().date()
+        week_start = today - timedelta(days=7)
+        last_2_days = today - timedelta(days=2)
+        last_month = today - timedelta(days=30)
+ 
+       
+        user_stats = User.objects.aggregate(
+            new_today=Count('id', filter=Q(date_joined__date=today)),
+            new_week=Count('id', filter=Q(date_joined__date__gte=week_start)),
+ 
+            active_today=Count('id', filter=Q(user_type="employer", last_seen__date=today)),
+            active_week=Count('id', filter=Q(user_type="employer", last_seen__date__gte=week_start)),
+ 
+            login_today=Count('id', filter=Q(last_seen__date=today)),
+ 
+            new_employers=Count('id', filter=Q(user_type="employer", date_joined__date=today)),
+        )
+ 
+       
+        job_stats = PostAJob.objects.aggregate(
+            total=Count('id'),
+            today=Count('id', filter=Q(created_at__date=today)),
+            week=Count('id', filter=Q(created_at__date__gte=week_start)),
+ 
+            rejected=Count('id', filter=Q(employer__company_verification__status="Reject")),
+            approved=Count('id', filter=Q(employer__company_verification__status="Verified")),
+ 
+            expired=Count('id', filter=Q(last_date_to_apply__lt=today)),
+        )
+ 
+       
+        app_stats = JobApplication.objects.aggregate(
+            total=Count('id'),
+            today=Count('id', filter=Q(applied_date__date=today)),
+            week=Count('id', filter=Q(applied_date__date__gte=week_start)),
+ 
+            last_2_days=Count('id', filter=Q(applied_date__date__gte=last_2_days)),
+            last_month=Count('id', filter=Q(applied_date__date__gte=last_month)),
+ 
+            shortlisted=Count('id', filter=Q(status="shortlisted")),
+            interviews=Count('id', filter=Q(status="interview_called")),
+            rejected=Count('id', filter=Q(status="rejected")),
+        )
+ 
+       
+        profile_update = (
+            JobSeekerProfile.objects.filter(updated_at__date=today).count()
+            + EmployerProfile.objects.filter(updated_at__date=today).count()
+            + AdminProfile.objects.filter(updated_at__date=today).count()
+        )
+ 
+        suspicious_activity = Complaint.objects.filter(
+    status=Complaint.Status.INVESTIGATING
+).count()
+ 
+        messages_sent = Message.objects.count()
+        support_tickets = RaiseTicket.objects.count()
+        emails_sent = EmailOTP.objects.count() + CompanyEmailOTP.objects.count()
+ 
+       
+        return Response({
+            "admin_activity_monitoring": {
+                "new_user_registrations": {
+                    "today": user_stats["new_today"],
+                    "this_week": user_stats["new_week"],
+                },
+                "job_posted": {
+                    "today": job_stats["today"],
+                    "this_week": job_stats["week"],
+                },
+                "total_applications": {
+                    "today": app_stats["today"],
+                    "this_week": app_stats["week"],
+                },
+                "active_employers": {
+                    "today": user_stats["active_today"],
+                    "this_week": user_stats["active_week"],
+                },
+            },
+            "platform_activity_overview": {
+                "user_activity": {
+                    "login_today": user_stats["login_today"],
+                    "profile_update": profile_update,
+                    "suspicious_activity": suspicious_activity,
+                },
+                "application_status": {
+                    "total_application": app_stats["total"],
+                    "shortlisted": app_stats["shortlisted"],
+                    "interviews": app_stats["interviews"],
+                    "rejections": app_stats["rejected"],
+                },
+                "employer_activity": {
+                    "new_employers": user_stats["new_employers"],
+                    "job_postings": job_stats["total"],
+                    "rejected_jobs": job_stats["rejected"],
+                },
+            },
+            "job_communication": {
+                "job_tracking": {
+                    "job_posted": job_stats["total"],
+                    "job_approved": job_stats["approved"],
+                    "expired_jobs": job_stats["expired"],
+                },
+                "communication_logs": {
+                    "messages_sent": messages_sent,
+                    "support_tickets": support_tickets,
+                    "emails_sent": emails_sent,
+                },
+                "employer_activity": {
+                    "applications_last_2_days": app_stats["last_2_days"],
+                    "applications_last_week": app_stats["week"],
+                    "applications_last_month": app_stats["last_month"],
+                },
+            },
+        })
+ 
+ 
+ 
+class AdminCompanyListView(APIView):
+    #permission_classes = [IsAuthenticated, IsAdminUserType] enable in prod
+    def get(self, request):
+        queryset = CompanyVerification.objects.select_related('employer')
+        serializer = AdminCompanySerializer(queryset, many=True)
+        return Response(serializer.data)
+ 
+class UpdateCompanyStatusView(APIView):
+    #permission_classes = [IsAuthenticated, IsAdminUserType] enable in prod
+    def patch(self, request, pk):
+        try:
+            obj = CompanyVerification.objects.get(id=pk)
+        except CompanyVerification.DoesNotExist:
+            return Response(
+                {"error": "Company not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+     
+        if set(request.data.keys()) != {"status"}:
+            return Response(
+                {"error": "Only 'status' field is allowed"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        verification = request.data.get("status")
+ 
+        valid_values = [choice[0] for choice in CompanyVerification.STATUS_CHOICES]
+ 
+        if verification not in valid_values:
+            return Response(
+                {"error": f"Invalid value. Allowed: {valid_values}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        previous = obj.status
+        obj.status = verification  
+        obj.save()
+ 
+        return Response({
+            "message": "Updated successfully",
+            "previous": previous,
+            "verification": obj.status
+        })
+   
+ 
+ 
