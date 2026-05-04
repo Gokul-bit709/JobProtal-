@@ -88,7 +88,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise serializers.ValidationError({
                 "detail": ["This account is inactive."]
             })
-
+        from django.utils import timezone
+        user.login_time = timezone.now()
+        user.save(update_fields=["login_time"])
+        
         print(f"✅ Login successful for: {user.username}")
 
         # ✅ Generate tokens

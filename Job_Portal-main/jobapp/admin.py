@@ -356,3 +356,5 @@ class CompanyProfileAdmin(admin.ModelAdmin):
                 'fields': ('created_at',)
             }),
         )  
+
+ 

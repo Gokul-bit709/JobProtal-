@@ -1636,8 +1636,9 @@ class SendEmailOTPView(APIView):
 class VerifyEmailOTPView(APIView):
     permission_classes = [AllowAny]
 
-    def post(self, request):
+    def post(self, request):     
         email = request.data.get("email")
+        user = User.objects.get(email=email)
         otp = request.data.get("otp")
 
         otp_obj = EmailOTP.objects.filter(
@@ -1652,6 +1653,10 @@ class VerifyEmailOTPView(APIView):
 
         otp_obj.is_verified = True
         otp_obj.save()
+        from django.utils import timezone
+        user.login_time = timezone.now()
+        user.save(update_fields=["login_time"])
+ 
 
         return Response({"message": "Email verified successfully"})
 
@@ -2116,6 +2121,9 @@ class GoogleLoginView(APIView):
         
         # Try to get token from different possible field names
         id_token_str = request.data.get('id_token') or request.data.get('access_token') or request.data.get('token')
+        from django.utils import timezone
+        user.login_time = timezone.now()
+        user.save(update_fields=["login_time"])
         
         if not id_token_str:
             return Response(
@@ -2442,6 +2450,7 @@ class AdminLoginView(APIView):
         if errors:
             return Response({'success': False, 'errors': errors},
                             status=status.HTTP_400_BAD_REQUEST)
+        
  
         # ── Find user by email ──────────────────────────────
         try:
@@ -2472,6 +2481,9 @@ class AdminLoginView(APIView):
                 {'success': False, 'errors': {'email': 'This account is disabled.'}},
                 status=status.HTTP_403_FORBIDDEN
             )
+        from django.utils import timezone
+        user.login_time = timezone.now()
+        user.save(update_fields=["login_time"])
  
         # ── Generate JWT tokens ─────────────────────────────
         refresh = RefreshToken.for_user(user)

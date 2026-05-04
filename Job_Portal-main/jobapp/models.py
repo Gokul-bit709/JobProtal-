@@ -31,6 +31,7 @@ class User(AbstractUser):
 
     is_online = models.BooleanField(default=False)
     last_seen = models.DateTimeField(auto_now=True)
+    login_time = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.username} ({self.user_type})"
