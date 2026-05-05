@@ -2647,3 +2647,177 @@ class AJobListView(APIView):
             })
  
         return Response(job_data)
+    
+ 
+class AdminJobListView(APIView):
+    """Admin view to get all jobs with company verification status"""
+    permission_classes = [IsAdminUserType]
+   
+    def get(self, request):
+        jobs = PostAJob.objects.all().select_related('employer').order_by('-created_at')
+       
+        job_data = []
+        for job in jobs:
+            # Get company verification status
+            verification_status = None
+            if hasattr(job.employer, 'company_verification'):
+                verification_status = job.employer.company_verification.status
+           
+            job_data.append({
+                'id': job.id,
+                'job_title': job.job_title,
+                'company_name': job.employer.employer_profile.company.company_name if job.employer.employer_profile.company else 'N/A',
+                'job_status': job.job_status,
+                'is_published': job.is_published,
+                'flagged': job.flagged,
+                'created_at': job.created_at,
+                'location': job.location,
+                'experience': job.experience,
+                'salary': job.salary,
+                'work_type': job.work_type,
+                'openings': job.openings,
+                'key_skills': job.key_skills,
+                'applicants_count': job.applications.count(),
+                'company_verification_status': verification_status,
+                'employer_email': job.employer.email,
+                'employer_username': job.employer.username,
+            })
+       
+        return Response({
+            'total_jobs': jobs.count(),
+            'jobs': job_data
+        }, status=status.HTTP_200_OK)
+ 
+ 
+class AdminJobApproveView(APIView):
+    """Admin approve a job (publish it)"""
+    permission_classes = [IsAdminUserType]
+   
+    def patch(self, request, pk):
+        job = get_object_or_404(PostAJob, pk=pk)
+       
+        # Can only approve if company is verified
+        verification = CompanyVerification.objects.filter(
+            employer=job.employer,
+            status='Verified'
+        ).first()
+       
+        if not verification:
+            return Response({
+                "error": "Cannot approve job. Company is not verified."
+            }, status=status.HTTP_400_BAD_REQUEST)
+       
+        job.is_published = True
+        job.save()
+       
+        # Create notification for employer
+        Notification.objects.create(
+            user=job.employer,
+            message=f"Your job '{job.job_title}' has been approved and is now live!",
+            notification_type='system'
+        )
+       
+        return Response({
+            "message": "Job approved successfully",
+            "job_id": job.id,
+            "is_published": job.is_published
+        }, status=status.HTTP_200_OK)
+ 
+ 
+class AdminJobRejectView(APIView):
+    """Admin reject a job (unpublish it)"""
+    permission_classes = [IsAdminUserType]
+   
+    def patch(self, request, pk):
+        job = get_object_or_404(PostAJob, pk=pk)
+        reason = request.data.get('reason', 'Job posting does not meet our guidelines.')
+       
+        job.is_published = False
+        job.save()
+       
+        # Create notification for employer
+        Notification.objects.create(
+            user=job.employer,
+            message=f"Your job '{job.job_title}' has been rejected. Reason: {reason}",
+            notification_type='system'
+        )
+       
+        return Response({
+            "message": "Job rejected successfully",
+            "job_id": job.id,
+            "is_published": job.is_published
+        }, status=status.HTTP_200_OK)
+ 
+ 
+class AdminJobFlagView(APIView):
+    """Admin flag/unflag a job for review"""
+    permission_classes = [IsAdminUserType]
+   
+    def patch(self, request, pk):
+        job = get_object_or_404(PostAJob, pk=pk)
+       
+        # Toggle flagged status
+        job.flagged = not job.flagged
+        job.save()
+       
+        # If flagged, notify employer
+        if job.flagged:
+            Notification.objects.create(
+                user=job.employer,
+                message=f"Your job '{job.job_title}' has been flagged for review by admin.",
+                notification_type='system'
+            )
+       
+        return Response({
+            "message": f"Job {'flagged' if job.flagged else 'unflagged'} successfully",
+            "job_id": job.id,
+            "flagged": job.flagged
+        }, status=status.HTTP_200_OK)
+ 
+ 
+class AdminJobDeleteView(APIView):
+    """Admin permanently delete a job"""
+    permission_classes = [IsAdminUserType]
+   
+    def delete(self, request, pk):
+        job = get_object_or_404(PostAJob, pk=pk)
+        job_title = job.job_title
+       
+        # Notify employer before deletion
+        Notification.objects.create(
+            user=job.employer,
+            message=f"Your job '{job_title}' has been permanently deleted by admin.",
+            notification_type='system'
+        )
+       
+        job.delete()
+       
+        return Response({
+            "message": f"Job '{job_title}' deleted successfully"
+        }, status=status.HTTP_200_OK)
+ 
+ 
+class AdminJobStatsView(APIView):
+    """Get job statistics for admin dashboard"""
+    permission_classes = [IsAdminUserType]
+   
+    def get(self, request):
+        today = timezone.now().date()
+        week_start = today - timedelta(days=7)
+       
+        stats = {
+            'total_jobs': PostAJob.objects.count(),
+            'published_jobs': PostAJob.objects.filter(is_published=True).count(),
+            'draft_jobs': PostAJob.objects.filter(is_published=False).count(),
+            'flagged_jobs': PostAJob.objects.filter(flagged=True).count(),
+            'jobs_today': PostAJob.objects.filter(created_at__date=today).count(),
+            'jobs_this_week': PostAJob.objects.filter(created_at__date__gte=week_start).count(),
+            'jobs_by_status': {
+                'hiring_in_progress': PostAJob.objects.filter(job_status='Hiring in Progress').count(),
+                'reviewing_application': PostAJob.objects.filter(job_status='Reviewing Application').count(),
+                'hiring_done': PostAJob.objects.filter(job_status='Hiring Done').count(),
+            }
+        }
+       
+        return Response(stats, status=status.HTTP_200_OK)        
+ 

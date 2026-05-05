@@ -1613,3 +1613,40 @@ class AJobSeekerSerializer(serializers.ModelSerializer):
     class Meta:
         model = AJobSeeker
         fields = '__all__'
+
+
+class AdminJobSerializer(serializers.ModelSerializer):
+    company_name = serializers.SerializerMethodField()
+    employer_email = serializers.EmailField(source='employer.email')
+    employer_username = serializers.CharField(source='employer.username')
+    applicants_count = serializers.SerializerMethodField()
+    company_verification_status = serializers.SerializerMethodField()
+    formatted_created_at = serializers.SerializerMethodField()
+   
+    class Meta:
+        model = PostAJob
+        fields = [
+            'id', 'job_title', 'company_name', 'job_status', 'is_published',
+            'flagged', 'created_at', 'formatted_created_at', 'location',
+            'experience', 'salary', 'work_type', 'openings', 'key_skills',
+            'applicants_count', 'employer_email', 'employer_username',
+            'company_verification_status', 'job_description'
+        ]
+   
+    def get_company_name(self, obj):
+        if obj.employer and hasattr(obj.employer, 'employer_profile'):
+            if obj.employer.employer_profile.company:
+                return obj.employer.employer_profile.company.company_name
+        return 'N/A'
+   
+    def get_applicants_count(self, obj):
+        return obj.applications.count()
+   
+    def get_company_verification_status(self, obj):
+        if hasattr(obj.employer, 'company_verification'):
+            return obj.employer.company_verification.status
+        return None
+   
+    def get_formatted_created_at(self, obj):
+        return obj.created_at.strftime('%Y-%m-%d')        
+ 

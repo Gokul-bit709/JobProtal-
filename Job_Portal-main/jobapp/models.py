@@ -381,6 +381,7 @@ class PostAJob(models.Model):
     job_description = models.TextField()
     responsibilities = models.JSONField(default=list, blank=True)
     last_date_to_apply = models.DateField( null=True, blank=True)
+ 
    
     job_status = models.CharField(
         max_length=50,
@@ -391,6 +392,8 @@ class PostAJob(models.Model):
 
     is_published = models.BooleanField(default=False, db_index=True)  
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    flagged = models.BooleanField(default=False, help_text="Admin flagged for review")
+ 
 
     def clean(self):
         valid_statuses = [status[0] for status in self.JobStatus.choices]
@@ -1032,3 +1035,5 @@ class AJob(models.Model):
  
     def __str__(self):
         return self.title
+    
+

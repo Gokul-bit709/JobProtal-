@@ -4,6 +4,12 @@ from .views import (
     AJobListView,
     AdminCompanyListView,
     AdminDashboardStats,
+    AdminJobApproveView,
+    AdminJobDeleteView,
+    AdminJobFlagView,
+    AdminJobListView,
+    AdminJobRejectView,
+    AdminJobStatsView,
     AdminLoginView,
     AdminUpdateComplaintView,
     CompanyProfileCreateView,
@@ -243,4 +249,11 @@ urlpatterns = [
     #admin dashboard
     path('admin/dashboard/', AdminDashboardStats.as_view()),
     path('admin/jobs/', AJobListView.as_view()),
+    #admin JobMonitoring
+    path('admin/jobs/', AdminJobListView.as_view(), name='admin-job-list'),
+    path('admin/jobs/<int:pk>/approve/', AdminJobApproveView.as_view(), name='admin-job-approve'),
+    path('admin/jobs/<int:pk>/reject/', AdminJobRejectView.as_view(), name='admin-job-reject'),
+    path('admin/jobs/<int:pk>/flag/', AdminJobFlagView.as_view(), name='admin-job-flag'),
+    path('admin/jobs/<int:pk>/delete/', AdminJobDeleteView.as_view(), name='admin-job-delete'),
+    path('admin/jobs/stats/', AdminJobStatsView.as_view(), name='admin-job-stats'),
 ]
