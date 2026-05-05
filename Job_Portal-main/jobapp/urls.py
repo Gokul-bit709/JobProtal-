@@ -1,7 +1,9 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
+    AJobListView,
     AdminCompanyListView,
+    AdminDashboardStats,
     AdminLoginView,
     AdminUpdateComplaintView,
     CompanyProfileCreateView,
@@ -238,4 +240,7 @@ urlpatterns = [
     path('users/', UserListView.as_view(), name='user-list'),
     path('users/<int:pk>/status/', UserStatusUpdateView.as_view(), name='user-status-update'),
     path('users/stats/', UserStatsView.as_view(), name='user-stats'),
+    #admin dashboard
+    path('admin/dashboard/', AdminDashboardStats.as_view()),
+    path('admin/jobs/', AJobListView.as_view()),
 ]

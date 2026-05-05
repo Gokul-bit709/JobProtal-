@@ -998,3 +998,37 @@ class CompanyEmailOTP(models.Model):
  
 
 
+from django.db import models
+ 
+class ACompany(models.Model):
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    def __str__(self):
+        return self.name
+ 
+ 
+class AEmployer(models.Model):
+    name = models.CharField(max_length=255)
+    company = models.ForeignKey(ACompany, on_delete=models.CASCADE)
+ 
+    def __str__(self):
+        return self.name
+ 
+ 
+class AJobSeeker(models.Model):
+    name = models.CharField(max_length=255)
+    email = models.EmailField()
+ 
+    def __str__(self):
+        return self.name
+ 
+ 
+class AJob(models.Model):
+    title = models.CharField(max_length=255)
+    company = models.ForeignKey(ACompany, on_delete=models.CASCADE)
+    status = models.CharField(max_length=50, default='active')
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    def __str__(self):
+        return self.title

@@ -2610,4 +2610,40 @@ class UserStatsView(APIView):
                 employers=Count('id', filter=Q(user_type=User.UserType.EMPLOYER)),
             )
         return Response(stats, status=status.HTTP_200_OK)
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import AJob, ACompany, AEmployer, AJobSeeker
  
+class AdminDashboardStats(APIView):
+ 
+    def get(self, request):
+        data = {
+            "total_jobs": AJob.objects.count(),
+            "total_companies": ACompany.objects.count(),
+            "total_employers": AEmployer.objects.count(),
+            "total_jobseekers": AJobSeeker.objects.count(),
+        }
+        return Response(data)
+   
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from .models import AJob
+ 
+class AJobListView(APIView):
+ 
+    def get(self, request):
+        jobs = AJob.objects.all().order_by('-created_at')
+ 
+        job_data = []
+        for job in jobs:
+            job_data.append({
+                "title": job.title,
+                "company": job.company.name,
+                "new": 100,      # replace later with real logic
+                "waiting": 20,
+                "total": 200
+            })
+ 
+        return Response(job_data)

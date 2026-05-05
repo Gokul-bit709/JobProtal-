@@ -1585,4 +1585,31 @@ class UserStatusUpdateSerializer(serializers.ModelSerializer):
             )
  
         return value
+
+
+serializers
+from rest_framework import serializers
+from .models import AJob, ACompany, AEmployer, AJobSeeker
  
+class AJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AJob
+        fields = '__all__'
+ 
+ 
+class ACompanySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ACompany
+        fields = '__all__'
+ 
+ 
+class AEmployerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AEmployer
+        fields = '__all__'
+ 
+ 
+class AJobSeekerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AJobSeeker
+        fields = '__all__'
