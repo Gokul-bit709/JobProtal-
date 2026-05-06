@@ -259,3 +259,5 @@ urlpatterns = [
     path('admin/jobs/<int:pk>/delete/', AdminJobDeleteView.as_view(), name='admin-job-delete'),
     path('admin/jobs/stats/', AdminJobStatsView.as_view(), name='admin-job-stats'),
 ]
+
+
