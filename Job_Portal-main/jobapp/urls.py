@@ -3,6 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     AJobListView,
     AdminCompanyListView,
+    AdminDashboardOverviewView,
     AdminDashboardStats,
     AdminJobApproveView,
     AdminJobDeleteView,
@@ -249,6 +250,7 @@ urlpatterns = [
     #admin dashboard
     path('admin/dashboard/', AdminDashboardStats.as_view()),
     path('admin/jobs/', AJobListView.as_view()),
+    path('admin/dashboard/overview/', AdminDashboardOverviewView.as_view(), name='admin-dashboard-overview'),
     #admin JobMonitoring
     path('admin/jobs/', AdminJobListView.as_view(), name='admin-job-list'),
     path('admin/jobs/<int:pk>/approve/', AdminJobApproveView.as_view(), name='admin-job-approve'),

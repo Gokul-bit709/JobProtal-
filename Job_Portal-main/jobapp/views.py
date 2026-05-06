@@ -2821,3 +2821,85 @@ class AdminJobStatsView(APIView):
        
         return Response(stats, status=status.HTTP_200_OK)        
  
+
+# ============ ADMIN DASHBOARD WIDGETS ============
+
+class AdminDashboardOverviewView(APIView):
+    """
+    Powers two widgets on the Admin Dashboard:
+    1. Top Experience Levels  — applicants bucketed by years of experience
+    2. Total Overview         — donut chart of application pipeline stages
+    """
+    permission_classes = [IsAdminUserType]
+
+    def get(self, request):
+
+        # ── 1. TOTAL OVERVIEW (donut chart) ──────────────────────────────────
+        # Map your JobApplication.Status values to the frontend labels
+        from django.db.models import Count
+
+        application_counts = JobApplication.objects.aggregate(
+            applicants   = Count('id', filter=Q(status=JobApplication.Status.APPLIED)),
+            recommended  = Count('id', filter=Q(status=JobApplication.Status.RECRUITER_REVIEW)),
+            shortlisted  = Count('id', filter=Q(status=JobApplication.Status.SHORTLISTED)),
+            interview    = Count('id', filter=Q(status=JobApplication.Status.INTERVIEW_CALLED)),
+            rejected     = Count('id', filter=Q(status=JobApplication.Status.REJECTED)),
+            hired        = Count('id', filter=Q(status=JobApplication.Status.HIRED)),
+        )
+
+        total_candidates = sum(application_counts.values())
+
+        total_overview = {
+            "total_candidates": total_candidates,
+            "recommended": application_counts["recommended"],
+            "shortlisted": application_counts["shortlisted"],
+            "applicants":  application_counts["applicants"],
+            "interview":   application_counts["interview"],
+            "rejected":    application_counts["rejected"],
+            "hired":       application_counts["hired"],
+        }
+
+        # ── 2. TOP EXPERIENCE LEVELS (bar chart) ─────────────────────────────
+        # Uses total_experience_years on JobSeekerProfile
+        # Buckets:  Entry (0–1), Junior (1–3), Mid (3–6), Senior (6+)
+
+        from .models import JobSeekerProfile
+
+        profiles = JobSeekerProfile.objects.filter(
+            total_experience_years__isnull=False
+        ).values_list('total_experience_years', flat=True)
+
+        entry  = sum(1 for y in profiles if float(y) <= 1)
+        junior = sum(1 for y in profiles if 1 < float(y) <= 3)
+        mid    = sum(1 for y in profiles if 3 < float(y) <= 6)
+        senior = sum(1 for y in profiles if float(y) > 6)
+
+        max_count = max(entry, junior, mid, senior, 1)  # avoid div-by-zero
+
+        experience_levels = [
+            {
+                "label":      "Entry Level",
+                "count":      entry,
+                "percentage": round((entry / max_count) * 100),
+            },
+            {
+                "label":      "Junior Level",
+                "count":      junior,
+                "percentage": round((junior / max_count) * 100),
+            },
+            {
+                "label":      "Mid Level",
+                "count":      mid,
+                "percentage": round((mid / max_count) * 100),
+            },
+            {
+                "label":      "Senior Level",
+                "count":      senior,
+                "percentage": round((senior / max_count) * 100),
+            },
+        ]
+
+        return Response({
+            "experience_levels": experience_levels,
+            "total_overview":    total_overview,
+        }, status=status.HTTP_200_OK)
