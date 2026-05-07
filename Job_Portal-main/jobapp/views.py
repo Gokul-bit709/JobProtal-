@@ -2440,78 +2440,118 @@ class UpdateCompanyStatusView(APIView):
 #admin
 
 class AdminLoginView(APIView):
-    """
-    Admin-specific login.
-    Accepts: { "email": "...", "password": "..." }
-    Returns: { access, refresh, user: { id, email, username, user_type } }
-    Only allows users with user_type == 'admin'.
-    """
+ 
     permission_classes = [AllowAny]
  
     def post(self, request):
-        email    = request.data.get('email', '').strip()
+ 
+        print("REQUEST DATA:", request.data)  # ← indented correctly
+ 
+        email = request.data.get('email') or request.data.get('username') or ''
+ 
+        email = email.strip()
+ 
         password = request.data.get('password', '').strip()
  
+        print("EMAIL:", email)
+ 
+        print("PASSWORD:", password)
+ 
         # ── Field-level validation ──────────────────────────
+ 
         errors = {}
+ 
         if not email:
+ 
             errors['email'] = 'Email is required.'
+ 
         if not password:
+ 
             errors['password'] = 'Password is required.'
+ 
         if errors:
+ 
             return Response({'success': False, 'errors': errors},
+ 
                             status=status.HTTP_400_BAD_REQUEST)
-        
  
         # ── Find user by email ──────────────────────────────
+ 
         try:
+ 
             user = User.objects.get(email__iexact=email)
+ 
         except User.DoesNotExist:
+ 
             return Response(
+ 
                 {'success': False, 'errors': {'email': 'No account found with this email.'}},
+ 
                 status=status.HTTP_401_UNAUTHORIZED
+ 
             )
  
-        # ── Check it's an admin account ─────────────────────
         if user.user_type != 'admin':
+ 
             return Response(
+ 
                 {'success': False, 'errors': {'email': 'This account does not have admin access.'}},
+ 
                 status=status.HTTP_403_FORBIDDEN
+ 
             )
  
-        # ── Check password ──────────────────────────────────
         if not user.check_password(password):
+ 
             return Response(
+ 
                 {'success': False, 'errors': {'password': 'Incorrect password.'}},
+ 
                 status=status.HTTP_401_UNAUTHORIZED
+ 
             )
  
-        # ── Check active ────────────────────────────────────
         if not user.is_active:
+ 
             return Response(
+ 
                 {'success': False, 'errors': {'email': 'This account is disabled.'}},
+ 
                 status=status.HTTP_403_FORBIDDEN
+ 
             )
+ 
+        refresh = RefreshToken.for_user(user)
+ 
         from django.utils import timezone
         user.login_time = timezone.now()
         user.save(update_fields=["login_time"])
  
-        # ── Generate JWT tokens ─────────────────────────────
-        refresh = RefreshToken.for_user(user)
- 
         return Response({
+ 
             'success': True,
+ 
             'message': 'Admin login successful.',
+ 
             'access':  str(refresh.access_token),
+ 
             'refresh': str(refresh),
+ 
             'user': {
+ 
                 'id':        user.id,
+ 
                 'email':     user.email,
+ 
                 'username':  user.username,
+ 
                 'user_type': user.user_type,
+ 
             }
+ 
         }, status=status.HTTP_200_OK)
-    
+ 
+ 
  
 #user management
  
