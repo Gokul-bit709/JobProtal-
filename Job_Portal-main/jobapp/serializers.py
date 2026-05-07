@@ -1650,3 +1650,94 @@ class AdminJobSerializer(serializers.ModelSerializer):
     def get_formatted_created_at(self, obj):
         return obj.created_at.strftime('%Y-%m-%d')        
  
+
+# ============================================================
+# ADD THESE TO THE BOTTOM OF YOUR EXISTING serializers.py
+# Also add Role, Module, Permission to your models import line
+# ============================================================
+
+from .models import Role, Module, Permission
+
+
+class ModuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Module
+        fields = ['id', 'name']
+
+
+class PermissionSerializer(serializers.ModelSerializer):
+    module_name = serializers.CharField(source='module.name', read_only=True)
+
+    class Meta:
+        model = Permission
+        fields = ['id', 'module', 'module_name', 'read', 'create', 'update', 'delete']
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    permissions = PermissionSerializer(many=True, read_only=True)
+
+    # Live count from User table — computed, not stored
+    # 'Candidate' role  → jobseeker users
+    # 'Employer' role   → employer users
+    user_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Role
+        fields = ['id', 'name', 'description', 'user_count', 'permissions']
+
+    def get_user_count(self, obj):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        name_lower = obj.name.lower()
+
+        if name_lower == 'candidate':
+            return User.objects.filter(user_type='jobseeker').count()
+        elif name_lower == 'employer':
+            return User.objects.filter(user_type='employer').count()
+        else:
+            # For any other custom roles return 0 for now
+            return 0
+
+
+class EmployerRoleSerializer(serializers.ModelSerializer):
+    """
+    Serializer for the employer list inside RoleManagement.
+    Reads from real User + EmployerProfile + CompanyProfile + Subscription.
+    """
+    company     = serializers.SerializerMethodField()
+    recruiter   = serializers.SerializerMethodField()
+    status      = serializers.SerializerMethodField()  # SUBSCRIBER / NON SUBSCRIBER
+    joined_date = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['id', 'company', 'recruiter', 'status', 'joined_date']
+
+    def get_company(self, obj):
+        try:
+            return obj.employer_profile.company.company_name if obj.employer_profile.company else '—'
+        except Exception:
+            return '—'
+
+    def get_recruiter(self, obj):
+        try:
+            name = obj.employer_profile.full_name
+            return name.upper() if name else obj.email.upper()
+        except Exception:
+            return obj.email.upper()
+
+    def get_status(self, obj):
+        from .models import Subscription
+        from django.utils import timezone
+
+        has_active_sub = Subscription.objects.filter(
+            user=obj,
+            status='active',
+            end_date__gte=timezone.now()
+        ).exists()
+
+        return 'SUBSCRIBER' if has_active_sub else 'NON SUBSCRIBER'
+
+    def get_joined_date(self, obj):
+        return obj.date_joined.strftime('%b %d, %Y') if obj.date_joined else '—'

@@ -412,8 +412,48 @@ class PostAJob(models.Model):
         self.clean()
         super().save(*args, **kwargs)
 
+     
+    
+    def delete(self, *args, **kwargs):  
+        from .models import JobHistory
+        from django.forms.models import model_to_dict
+        from django.core.serializers.json import DjangoJSONEncoder
+        import json
+ 
+       
+        job_data = model_to_dict(self)
+ 
+       
+        job_data = json.loads(json.dumps(job_data, cls=DjangoJSONEncoder))
+ 
+       
+        job_data["id"] = self.id
+        job_data["created_at"] = self.created_at.isoformat()
+ 
+       
+        JobHistory.objects.create(
+            job_id=self.id,
+            employer=self.employer,
+            job_title=self.job_title,
+            created_at=self.created_at,
+            deleted_at=timezone.now(),
+            data=job_data
+        )
+ 
+        super().delete(*args, **kwargs)
+
     def __str__(self):
         return self.job_title
+    
+class JobHistory(models.Model):  
+    job_id = models.IntegerField()
+    employer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    job_title = models.CharField(max_length=255)
+ 
+    created_at = models.DateTimeField()
+    deleted_at = models.DateTimeField()
+ 
+    data = models.JSONField(default=dict)
 
 
 class JobApplication(models.Model):
@@ -434,15 +474,49 @@ class JobApplication(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.APPLIED)
     cover_letter = models.TextField(blank=True, null=True)
     resume_version = models.FileField(upload_to='application_resumes/', null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)  
+    resume_hash = models.CharField(max_length=64, null=True, blank=True)  
 
     class Meta:
         indexes = [
             models.Index(fields=['user', 'job']),
         ]
+    
 
     def __str__(self):
         return f"{self.user.email} → {self.job.job_title}"
-
+    
+class ApplicationFlag(models.Model):  
+ 
+    class Reason(models.TextChoices):
+        IP_CONFLICT = "IP_CONFLICT", "IP Conflict"
+        RESUME_BOT = "RESUME_BOT", "Resume Bot"
+        FRAUDULENT_CREDS = "FRAUDULENT_CREDS", "Fraudulent Credentials"
+ 
+    class Risk(models.TextChoices):
+        CRITICAL = "CRITICAL", "Critical"
+        HIGH = "HIGH", "High"
+        MODERATE = "MODERATE", "Moderate"
+ 
+    application = models.ForeignKey(
+        JobApplication,
+        on_delete=models.CASCADE,
+        related_name="flags"
+    )
+ 
+    flag_reason = models.CharField(max_length=50, choices=Reason.choices)
+    detected_method = models.TextField()
+    risk_level = models.CharField(max_length=20, choices=Risk.choices)
+ 
+    is_reviewed = models.BooleanField(default=False)
+ 
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    def __str__(self):
+        return f"{self.flag_reason} - {self.application.id}"
+   
+ 
+ 
 
 class SavedJob(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_jobs')
@@ -698,7 +772,7 @@ class CompanyVerification(models.Model):
  
         super().save(*args, **kwargs)
  
-        if self.status == "approved" and previous_status != "approved":
+        if self.status == "Verified" and previous_status != "Verified":
             employer_profile = self.employer.employer_profile
            
             # Find or create company profile
@@ -1037,3 +1111,50 @@ class AJob(models.Model):
         return self.title
     
 
+
+# ============================================================
+# ADD THESE TO THE BOTTOM OF YOUR EXISTING models.py
+# Remove the old: Role, Module, Permission, Employer models
+# ============================================================
+
+# Role Management
+
+class Role(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    description = models.TextField(blank=True)
+
+    # DO NOT store user_count as a field — compute it live from User table
+    # user_count = models.IntegerField(default=0)  ← REMOVED
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Module(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Permission(models.Model):
+    role = models.ForeignKey(Role, on_delete=models.CASCADE, related_name='permissions')
+    module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name='permissions')
+
+    read   = models.BooleanField(default=False)
+    create = models.BooleanField(default=False)
+    update = models.BooleanField(default=False)
+    delete = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ['role', 'module']  # one permission row per role+module combo
+
+    def __str__(self):
+        return f"{self.role.name} → {self.module.name}"
+
+
+# NOTE: Do NOT create a separate Employer model.
+# Use the existing User + EmployerProfile + CompanyProfile + Subscription models.
+# The employer list in RoleManagement reads from those real tables.

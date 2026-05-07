@@ -13,8 +13,10 @@ from .views import (
     AdminJobStatsView,
     AdminLoginView,
     AdminUpdateComplaintView,
+    ApplicationFlagReadStatusView,
     CompanyProfileCreateView,
     DashboardView,
+    JobApplicationReportView,
     JobSeekerRegistrationView,
     EmployerRegistrationView,
     LoginView,
@@ -86,6 +88,14 @@ from .views import (
     SendCompanyEmailOTPView,
     EmployerOnboardingStatusView,
     GoogleLoginView,
+    RoleListView,
+    RoleCreateView,
+    RoleDeleteView,
+    RolePermissionView,
+    UpdatePermissionView,
+    BulkUpdatePermissionsView,
+    EmployerRoleListView,
+    EmployerRoleDeleteView,
     
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
@@ -258,6 +268,21 @@ urlpatterns = [
     path('admin/jobs/<int:pk>/flag/', AdminJobFlagView.as_view(), name='admin-job-flag'),
     path('admin/jobs/<int:pk>/delete/', AdminJobDeleteView.as_view(), name='admin-job-delete'),
     path('admin/jobs/stats/', AdminJobStatsView.as_view(), name='admin-job-stats'),
-]
 
+    path('report/',JobApplicationReportView.as_view(),name='report'),
+    path("application-flags/<int:flag_id>/read-status/",ApplicationFlagReadStatusView.as_view()),
+    # ── Role Management ─────────────────────────────────────
+    path('roles/',                                      RoleListView.as_view(),             name='role-list'),
+    path('roles/create/',                               RoleCreateView.as_view(),           name='role-create'),
+    path('roles/<int:role_id>/delete/',                 RoleDeleteView.as_view(),           name='role-delete'),
+ 
+    # ── Permissions ─────────────────────────────────────────
+    path('roles/<int:role_id>/permissions/',            RolePermissionView.as_view(),       name='role-permissions'),
+    path('roles/<int:role_id>/permissions/bulk-update/',BulkUpdatePermissionsView.as_view(),name='role-permissions-bulk-update'),
+    path('permissions/<int:permission_id>/update/',     UpdatePermissionView.as_view(),     name='permission-update'),
+ 
+    # ── Employer list inside Role Management ─────────────────
+    path('role-management/employers/',                  EmployerRoleListView.as_view(),     name='role-management-employers'),
+    path('role-management/employers/<int:pk>/delete/',  EmployerRoleDeleteView.as_view(),   name='role-management-employer-delete'),
+]
 
