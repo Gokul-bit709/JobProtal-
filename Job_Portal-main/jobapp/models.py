@@ -1155,6 +1155,88 @@ class Permission(models.Model):
         return f"{self.role.name} → {self.module.name}"
 
 
-# NOTE: Do NOT create a separate Employer model.
-# Use the existing User + EmployerProfile + CompanyProfile + Subscription models.
-# The employer list in RoleManagement reads from those real tables.
+
+
+ 
+class NotificationConfig(models.Model):  #newly added 08/05
+ 
+    CATEGORY_CHOICES = [
+        ('user_mgmt', 'User Management'),
+        ('job_mgmt', 'Job Management'),
+        ('apps', 'Applications'),
+        ('companies', 'Companies'),
+        ('reports', 'Reports'),
+        ('general', 'General'),
+    ]
+ 
+    category = models.CharField(
+        max_length=30,
+        choices=CATEGORY_CHOICES,
+        unique=True
+    )
+ 
+    # Channels
+    in_app = models.BooleanField(default=True)
+ 
+    email = models.BooleanField(default=True)
+ 
+    sms = models.BooleanField(default=False)
+ 
+    push = models.BooleanField(default=False)
+ 
+    updated_at = models.DateTimeField(auto_now=True)
+ 
+    def __str__(self):
+        return self.category
+   
+ 
+class AdminQuietHours(models.Model):  #newly added 08/05
+ 
+    admin = models.OneToOneField(
+    User,
+    on_delete=models.CASCADE
+)
+ 
+    enabled = models.BooleanField(default=False)
+ 
+    start_time = models.TimeField(
+        default="22:00"
+    )
+ 
+    end_time = models.TimeField(
+        default="07:00"
+    )
+ 
+    timezone = models.CharField(
+        max_length=100,
+        default="Asia/Kolkata"
+    )
+ 
+    active_days = models.JSONField(
+        default=list
+    )
+ 
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+ 
+    def __str__(self):
+        return self.admin.email
+   
+ 
+class NotificationChannelSettings(models.Model): #newly added 08/05
+ 
+    email_notif = models.BooleanField(default=True)
+ 
+    inapp_notif = models.BooleanField(default=True)
+ 
+    sms_notif = models.BooleanField(default=False)
+ 
+    push_notif = models.BooleanField(default=False)
+ 
+    updated_at = models.DateTimeField(auto_now=True)
+ 
+    def __str__(self):
+        return "Notification Channel Settings"
+ 
+ 

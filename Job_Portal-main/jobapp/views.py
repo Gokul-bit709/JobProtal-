@@ -3518,3 +3518,492 @@ class EmployerRoleDeleteView(APIView):
             {"message": "Employer deleted successfully."},
             status=status.HTTP_200_OK
         )
+
+
+
+
+ 
+# for notification setting
+ 
+from datetime import datetime
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+ 
+from rest_framework.response import Response
+ 
+from .models import NotificationConfig , AdminQuietHours , NotificationChannelSettings
+ 
+class NotificationPreferenceListView(APIView):
+ 
+    #permission_classes = [IsAdminUserType] please activate in production
+ 
+    def get(self, request):
+ 
+        default_notification_categories = [
+            "user_mgmt",
+            "job_mgmt",
+            "apps",
+            "companies",
+            "reports",
+            "general",
+        ]
+ 
+        for category in default_notification_categories:
+ 
+            NotificationConfig.objects.get_or_create(
+                category=category
+            )
+ 
+        configs = NotificationConfig.objects.all()
+ 
+        table_preferences = {}
+ 
+        for config in configs:
+ 
+            table_preferences[config.category] = {
+                "Email": config.email,
+                "In-App": config.in_app,
+                "SMS": config.sms,
+                "Push": config.push,
+            }
+ 
+        return Response({
+            "table_preferences": table_preferences
+        })
+   
+ 
+class NotificationPreferenceUpdateView(APIView):
+ 
+    #permission_classes = [IsAdminUserType] please activate in production
+ 
+    def patch(self, request):
+ 
+        table_preferences = request.data.get(
+            "table_preferences",
+            {}
+        )
+ 
+        for category, values in table_preferences.items():
+ 
+            config = NotificationConfig.objects.get(
+                category=category
+            )
+ 
+            config.email = values.get(
+                "Email",
+                config.email
+            )
+ 
+            config.in_app = values.get(
+                "In-App",
+                config.in_app
+            )
+ 
+            config.sms = values.get(
+                "SMS",
+                config.sms
+            )
+ 
+            config.push = values.get(
+                "Push",
+                config.push
+            )
+ 
+            config.save()
+ 
+        return Response({
+            "message": "Notification preferences updated successfully"
+        })
+   
+ 
+class AdminQuietHoursView(APIView):
+ 
+    #permission_classes = [IsAdminUserType]
+ 
+    def get(self, request):
+ 
+        quiet_hours, created = AdminQuietHours.objects.get_or_create(
+            admin=request.user,
+            defaults={
+                "enabled": False,
+                "start_time": "22:00",
+                "end_time": "07:00",
+                "timezone": "Asia/Kolkata",
+                "active_days": [
+                    "Mon",
+                    "Tue",
+                    "Wed",
+                    "Thu",
+                    "Fri"
+                ]
+            }
+        )
+ 
+        return Response({
+            "quiet_hours": {
+                "enabled": quiet_hours.enabled,
+                "start_time": quiet_hours.start_time,
+                "end_time": quiet_hours.end_time,
+                "timezone": quiet_hours.timezone,
+                "active_days": quiet_hours.active_days,
+            }
+        })
+   
+ 
+ 
+class AdminQuietHoursView(APIView):
+ 
+    #permission_classes = [IsAdminUserType]
+ 
+    def get(self, request):
+        # Temporary hardcoded admin user
+            # Remove in production
+        user = User.objects.get(id=1) # remove in production
+        quiet_hours, created = AdminQuietHours.objects.get_or_create(
+            admin=user, # remove this line and add below line
+            #admin=request.user,
+            defaults={
+                "enabled": False,
+                "start_time": "22:00",
+                "end_time": "07:00",
+                "timezone": "Asia/Kolkata",
+                "active_days": [
+                    "Mon",
+                    "Tue",
+                    "Wed",
+                    "Thu",
+                    "Fri"
+                ]
+            }
+        )
+ 
+        return Response({
+            "quiet_hours": {
+                "enabled": quiet_hours.enabled,
+                "start_time": quiet_hours.start_time,
+                "end_time": quiet_hours.end_time,
+                "timezone": quiet_hours.timezone,
+                "active_days": quiet_hours.active_days,
+            }
+        })
+ 
+class AdminQuietHoursUpdateView(APIView):
+ 
+    # permission_classes = [IsAdminUserType]
+ 
+    VALID_DAYS = [
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat",
+        "Sun"
+    ]
+ 
+    def patch(self, request):
+ 
+        try:
+ 
+            quiet_data = request.data.get(
+                "quiet_hours",
+                {}
+            )
+ 
+            if not isinstance(quiet_data, dict):
+ 
+                return Response(
+                    {
+                        "error": "quiet_hours must be an object"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+ 
+            # Temporary hardcoded admin user
+            # Remove in production
+            user = User.objects.get(id=1)
+ 
+            quiet_hours, created = AdminQuietHours.objects.get_or_create(
+                admin=user
+                # admin=request.user
+            )
+ 
+            enabled = quiet_data.get("enabled")
+            start_time = quiet_data.get("start_time")
+            end_time = quiet_data.get("end_time")
+            timezone = quiet_data.get("timezone")
+            active_days = quiet_data.get("active_days")
+ 
+            # ── Enabled Validation ─────────────────────────────
+ 
+            if enabled is not None and not isinstance(enabled, bool):
+ 
+                return Response(
+                    {
+                        "error": "enabled must be true or false"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+ 
+            # ── Time Validation ───────────────────────────────
+ 
+            try:
+ 
+                if start_time:
+ 
+                    try:
+                        datetime.strptime(start_time, "%H:%M")
+                    except ValueError:
+                        datetime.strptime(start_time, "%H:%M:%S")
+ 
+                if end_time:
+ 
+                    try:
+                        datetime.strptime(end_time, "%H:%M")
+                    except ValueError:
+                        datetime.strptime(end_time, "%H:%M:%S")
+ 
+            except ValueError:
+ 
+                return Response(
+                    {
+                        "error": (
+                            "Invalid time format. "
+                            "Use HH:MM or HH:MM:SS"
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+ 
+            # ── Timezone Validation ───────────────────────────
+ 
+            if timezone is not None:
+ 
+                if not isinstance(timezone, str):
+ 
+                    return Response(
+                        {
+                            "error": "timezone must be string"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+ 
+                if len(timezone.strip()) == 0:
+ 
+                    return Response(
+                        {
+                            "error": "timezone cannot be empty"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+ 
+            # ── Active Days Validation ────────────────────────
+ 
+            if active_days is not None:
+ 
+                if not isinstance(active_days, list):
+ 
+                    return Response(
+                        {
+                            "error": "active_days must be list"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+ 
+                invalid_days = [
+                    day for day in active_days
+                    if day not in self.VALID_DAYS
+                ]
+ 
+                if invalid_days:
+ 
+                    return Response(
+                        {
+                            "error": f"Invalid days: {invalid_days}"
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+ 
+            # ── Save Data ─────────────────────────────────────
+ 
+            if enabled is not None:
+                quiet_hours.enabled = enabled
+ 
+            if start_time:
+                quiet_hours.start_time = start_time
+ 
+            if end_time:
+                quiet_hours.end_time = end_time
+ 
+            if timezone:
+                quiet_hours.timezone = timezone
+ 
+            if active_days is not None:
+                quiet_hours.active_days = active_days
+ 
+            quiet_hours.save()
+ 
+            return Response(
+                {
+                    "message": "Quiet hours updated successfully",
+ 
+                    "quiet_hours": {
+                        "enabled": quiet_hours.enabled,
+                        "start_time": quiet_hours.start_time,
+                        "end_time": quiet_hours.end_time,
+                        "timezone": quiet_hours.timezone,
+                        "active_days": quiet_hours.active_days,
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+ 
+        except User.DoesNotExist:
+ 
+            return Response(
+                {
+                    "error": "Admin user not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+        except Exception as e:
+ 
+            return Response(
+                {
+                    "error": str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+       
+ 
+class NotificationChannelSettingsView(APIView):
+     #permission_classes = [IsAdminUserType] please activate in production
+ 
+    def get(self, request):
+ 
+        settings_obj, _ = (
+            NotificationChannelSettings.objects.get_or_create(
+                id=1  # for production use = request.user
+            )
+        )
+ 
+        return Response({
+            "quick_setup": {
+                "email_notif": settings_obj.email_notif,
+                "inapp_notif": settings_obj.inapp_notif,
+                "sms_notif": settings_obj.sms_notif,
+                "push_notif": settings_obj.push_notif,
+            }
+        })
+   
+ 
+class NotificationChannelSettingsUpdateView(APIView):
+     #permission_classes = [IsAdminUserType] please activate in production
+ 
+    def patch(self, request):
+ 
+        try:
+ 
+            quick_setup = request.data.get(
+                "quick_setup",
+                {}
+            )
+ 
+            if not isinstance(quick_setup, dict):
+ 
+                return Response(
+                    {
+                        "error": (
+                            "quick_setup must be object"
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+ 
+            settings_obj, _ = (
+                NotificationChannelSettings.objects.get_or_create(
+                    id=1
+                )
+            )
+ 
+            email_notif = quick_setup.get(
+                "email_notif"
+            )
+ 
+            inapp_notif = quick_setup.get(
+                "inapp_notif"
+            )
+ 
+            sms_notif = quick_setup.get(
+                "sms_notif"
+            )
+ 
+            push_notif = quick_setup.get(
+                "push_notif"
+            )
+ 
+            # Boolean validation
+ 
+            bool_fields = {
+                "email_notif": email_notif,
+                "inapp_notif": inapp_notif,
+                "sms_notif": sms_notif,
+                "push_notif": push_notif,
+            }
+ 
+            for field, value in bool_fields.items():
+ 
+                if value is not None and not isinstance(value, bool):
+ 
+                    return Response(
+                        {
+                            "error": (
+                                f"{field} must be "
+                                f"true or false"
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+ 
+            if email_notif is not None:
+                settings_obj.email_notif = email_notif
+ 
+            if inapp_notif is not None:
+                settings_obj.inapp_notif = inapp_notif
+ 
+            if sms_notif is not None:
+                settings_obj.sms_notif = sms_notif
+ 
+            if push_notif is not None:
+                settings_obj.push_notif = push_notif
+ 
+            settings_obj.save()
+ 
+            return Response(
+                {
+                    "message": (
+                        "Notification channel "
+                        "settings updated successfully"
+                    ),
+ 
+                    "quick_setup": {
+                        "email_notif": settings_obj.email_notif,
+                        "inapp_notif": settings_obj.inapp_notif,
+                        "sms_notif": settings_obj.sms_notif,
+                        "push_notif": settings_obj.push_notif,
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+ 
+        except Exception as e:
+ 
+            return Response(
+                {
+                    "error": str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+ 

@@ -96,6 +96,12 @@ from .views import (
     BulkUpdatePermissionsView,
     EmployerRoleListView,
     EmployerRoleDeleteView,
+    NotificationPreferenceUpdateView,
+    NotificationPreferenceListView,
+    AdminQuietHoursView,
+    AdminQuietHoursUpdateView,
+    NotificationChannelSettingsView,    
+    NotificationChannelSettingsUpdateView,
     
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
@@ -284,5 +290,20 @@ urlpatterns = [
     # ── Employer list inside Role Management ─────────────────
     path('role-management/employers/',                  EmployerRoleListView.as_view(),     name='role-management-employers'),
     path('role-management/employers/<int:pk>/delete/',  EmployerRoleDeleteView.as_view(),   name='role-management-employer-delete'),
+     #for notification catogory prefer
+ 
+    path("notification-preferences/update/",NotificationPreferenceUpdateView.as_view(),),
+    path("notification-preferences/",NotificationPreferenceListView.as_view(),),
+ 
+    # quiet hours
+    path("quiet-hours/",AdminQuietHoursView.as_view(),),
+    path("quiet-hours/update/", AdminQuietHoursUpdateView.as_view(),),
+ 
+     # Notification Channel Settings
+ 
+ 
+    path("notification-channels/",NotificationChannelSettingsView.as_view(),name="notification-channels"),
+    path("notification-channels/update/",NotificationChannelSettingsUpdateView.as_view(),name="notification-channels-update"),
+ 
 ]
 
