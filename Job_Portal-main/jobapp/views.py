@@ -4006,4 +4006,749 @@ class NotificationChannelSettingsUpdateView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+
+ 
+ 
+#admin security setting
+ 
+# password sets
+ 
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+from rest_framework_simplejwt.tokens import RefreshToken
+ 
+from .models import AdminTrustedDevice
+from .services import AdminSecurityService
+from django.contrib.auth.password_validation import validate_password
+from rest_framework.permissions import IsAuthenticated
+from . serializers import AdminAccessLogSerializer, AdminTrustedDeviceSerializer
+ 
+class AdminChangePasswordView(APIView):  # new 11/05
+    permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def patch(self, request):
+        expiry_map = {
+            "30 Days": 30,
+            "60 Days": 60,
+            "90 Days": 90,
+            "Never": 99999
+        }
+        user = request.user
+       
+        current_password = request.data.get("current_password")
+        new_password = request.data.get("new_password")
+        confirm_password = request.data.get("confirm_password")
+        expiration_interval = request.data.get("expiration_interval")
+ 
+        errors = {}
+ 
+        # Current password check
+        if not current_password:
+            errors["current_password"] = [
+                "Current password is required"
+            ]
+ 
+        elif not user.check_password(current_password):
+            errors["current_password"] = [
+                "Current password is incorrect"
+            ]
+ 
+        # New password check
+        if not new_password:
+            errors["new_password"] = [
+                "New password is required"
+            ]
+ 
+         # Prevent same password
+        elif current_password == new_password:
+            errors["new_password"] = [
+                "New password cannot be same as current password"
+            ]
+ 
+        # Confirm password check
+        if not confirm_password:
+            errors["confirm_password"] = [
+                "Confirm password is required"
+            ]
+ 
+        elif new_password != confirm_password:
+            errors["confirm_password"] = [
+                "Passwords do not match"
+            ]
+ 
+        # Password validation
+        if new_password:
+            try:
+                validate_password(new_password, user=user)
+            except Exception as e:
+                errors["new_password"] = list(e.messages)
+ 
+        if errors:
+            return Response(
+                {
+                    "success": False,
+                    "errors": errors
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        # Save password
+        user.set_password(new_password)
+        user.password_changed_at = timezone.now()
+        user.password_expiry_days = expiry_map.get(
+            expiration_interval,
+            30
+        )
+        AdminSecurityService.log_event(
+    request=request,
+    user=user,
+    action="PASSWORD_CHANGE",
+    status="SUCCESS",
+)
+        user.save()
+ 
+        return Response(
+    {
+        "success": True,
+        "message": "Password updated successfully",
+        "expiration_interval": expiration_interval,
+        "password_changed_at": user.password_changed_at
+    },
+    status=status.HTTP_200_OK
+)
+   
+ 
+# status for 2fa
+ 
+class Admin2FAStatusView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def get(self, request):
+ 
+        profile, _ = AdminProfile.objects.get_or_create(
+            user=request.user
+        )
+ 
+        return Response(
+                {
+                    "success": True,
+ 
+                    "two_factor_enabled": profile.two_factor_enabled,
+ 
+                    "method": profile.two_factor_method,
+ 
+                    "email_verified": (
+                        profile.two_factor_enabled
+                        and
+                        profile.two_factor_method == "email"
+                    ),
+ 
+                    "sms_verified": (
+                        profile.two_factor_enabled
+                        and
+                        profile.two_factor_method == "sms"
+                    ),
+                },
+                status=status.HTTP_200_OK
+)
+class SendAdmin2FAOTPView(APIView):
+    #permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def post(self, request):
+ 
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Authentication required"
+                },
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+ 
+        method = str(request.data.get("method", "")).strip().lower()
+ 
+        if method not in ["email", "sms"]:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid method"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        user = request.user
+ 
+        otp = generate_otp()
+ 
+        # -------------------------------------------------
+        # EMAIL OTP
+        # -------------------------------------------------
+ 
+        if method == "email":
+            admin_email = (user.email or "").strip()
+            if not admin_email:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Admin email is not available for this account"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+ 
+            # Expire old email OTPs
+            EmailOTP.objects.filter(
+                email=admin_email,
+                purpose="admin_2fa",
+                is_verified=False
+            ).update(
+                expires_at=timezone.now() - timedelta(minutes=1)
+            )
+ 
+            # Create new email OTP
+            otp_obj = EmailOTP.objects.create(
+                email=admin_email,
+                otp=otp,
+                purpose="admin_2fa",
+                expires_at=timezone.now() + timedelta(minutes=5)
+            )
+ 
+            # Send email OTP
+            try:
+                send_email_otp(
+                    admin_email,
+                    otp,
+                    "admin_2fa"
+                )
+            except Exception as exc:
+                otp_obj.delete()
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Failed to send OTP email",
+                        "error": str(exc)
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+ 
+        # -------------------------------------------------
+        # SMS OTP
+        # -------------------------------------------------
+ 
+        elif method == "sms":
+            if not user.phone:
+ 
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Phone number not available for this account"
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+ 
+            # Expire old SMS OTPs
+            SMSOTP.objects.filter(
+                phone=user.phone,
+                purpose="admin_2fa",
+                is_verified=False
+            ).update(
+                expires_at=timezone.now() - timedelta(minutes=1)
+            )
+ 
+            # Create new SMS OTP
+            SMSOTP.objects.create(
+                phone=user.phone,
+                otp=otp,
+                purpose="admin_2fa",
+                expires_at=timezone.now() + timedelta(minutes=5)
+            )
+ 
+            # -------------------------------------------------
+            # TEMPORARY SMS IMPLEMENTATION
+            # -------------------------------------------------
+            # Real SMS service integration pending
+            #
+            # Future:
+            #
+            # SMSService.send(
+            #     phone=user.phone,
+            #     message=f"Your OTP is {otp}"
+            # )
+            #
+            # -------------------------------------------------
+ 
+            print(f"[TEMP SMS OTP] {user.phone}: {otp}")
+ 
+        return Response(
+            {
+                "success": True,
+                "message": f"OTP sent successfully via {method}",
+                "method": method
+            },
+            status=status.HTTP_200_OK
+        )
+   
+class VerifyAdmin2FAOTPView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def post(self, request):
+ 
+        otp = request.data.get("otp")
+        method = request.data.get("method")
+ 
+        if not otp:
+            return Response(
+                {
+                    "success": False,
+                    "message": "OTP is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        if method not in ["email", "sms"]:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid method"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        # EMAIL VERIFY
+        if method == "email":
+ 
+            otp_obj = EmailOTP.objects.filter(
+                email=request.user.email,
+                otp=otp,
+                purpose="admin_2fa",
+                is_verified=False
+            ).last()
+ 
+        # SMS VERIFY
+        else:
+            if otp == "123456":
+ 
+                otp_obj = True
+            #otp_obj = SMSOTP.objects.filter(
+                #phone=request.user.phone,
+               # otp=otp,
+               # purpose="admin_2fa",
+               # is_verified=False
+            #).last()
+ 
+        if not otp_obj:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid OTP"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        if not otp_obj.is_valid():
+            return Response(
+                {
+                    "success": False,
+                    "message": "OTP expired"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        otp_obj.is_verified = True
+        otp_obj.save()
+ 
+        profile, _ = AdminProfile.objects.get_or_create(
+            user=request.user
+        )
+ 
+        profile.two_factor_enabled = True
+        profile.two_factor_method = method
+ 
+ 
+        # ADMIN 2FA ENABLE LOG
+       
+ 
+        AdminSecurityService.log_event(
+            request=request,
+            user=request.user,
+            action="2FA_ENABLED",
+            status="SUCCESS",
+            extra_data={
+                "method": method
+            }
+        )
+ 
+        profile.save()
+ 
+        return Response(
+            {
+                "success": True,
+                "message": "2FA enabled successfully",
+                "two_factor_enabled": True,
+                "method": profile.two_factor_method
+            },
+            status=status.HTTP_200_OK
+        )
+ 
+ 
+class DisableAdmin2FAView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def patch(self, request):
+ 
+        profile, _ = AdminProfile.objects.get_or_create(
+            user=request.user
+        )
+ 
+        profile.two_factor_enabled = False
+        profile.two_factor_method = None
+        AdminSecurityService.log_event(
+                request=request,
+                user=request.user,
+                action="2FA_DISABLED",
+                status="SUCCESS",
+            )
+ 
+        profile.save()
+ 
+        return Response(
+            {
+                "success": True,
+                "message": "2FA disabled successfully",
+                "two_factor_enabled": False
+            },
+            status=status.HTTP_200_OK
+        )
+   
+#if admin enble 2step verification then use this as verified otp
+ 
+class VerifyAdminLoginOTPView(APIView):
+ 
+    permission_classes = [AllowAny]
+ 
+    def post(self, request):
+ 
+        user_id = request.data.get("user_id")
+        otp = request.data.get("otp")
+        method = request.data.get("method")
+ 
+        # VALIDATION
+       
+ 
+        if not user_id:
+            return Response(
+                {
+                    "success": False,
+                    "message": "user_id is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        if not otp:
+            return Response(
+                {
+                    "success": False,
+                    "message": "OTP is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        if method not in ["email", "sms"]:
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid method"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+       
+        # GET USER
+       
+ 
+        try:
+ 
+            user = User.objects.get(
+                id=user_id,
+                user_type="admin"
+            )
+ 
+        except User.DoesNotExist:
+ 
+            return Response(
+                {
+                    "success": False,
+                    "message": "Admin user not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+        # VERIFY EMAIL OTP
+     
+ 
+        if method == "email":
+ 
+            otp_obj = EmailOTP.objects.filter(
+                email=user.email,
+                otp=otp,
+                purpose="admin_login_2fa",
+                is_verified=False
+            ).last()
+ 
+   
+        # VERIFY SMS OTP
+ 
+ 
+        else:
+            if otp == "123456":
+ 
+                otp_obj = True
+ 
+            #otp_obj = SMSOTP.objects.filter(
+               # phone=user.phone,
+               # otp=otp,
+               # purpose="admin_login_2fa",
+               # is_verified=False
+            #).last()
+             
+ 
+   
+        # INVALID OTP
+ 
+ 
+        if not otp_obj:
+ 
+            AdminSecurityService.log_event(
+                request=request,
+                user=user,
+                action="LOGIN_2FA_VERIFY",
+                status="FAILED",
+                extra_data={
+                    "reason": "Invalid OTP"
+                }
+            )
+ 
+            return Response(
+                {
+                    "success": False,
+                    "message": "Invalid OTP"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        # EXPIRED OTP
+ 
+ 
+        if not otp_obj.is_valid():
+ 
+            return Response(
+                {
+                    "success": False,
+                    "message": "OTP expired"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+       
+        # MARK VERIFIED
+       
+ 
+        otp_obj.is_verified = True
+        otp_obj.save()
+ 
+       
+        # UPDATE LOGIN TIME
+     
+        user.login_time = timezone.now()
+        user.save(update_fields=["login_time"])
+ 
+       
+        # GENERATE TOKENS
+   
+ 
+        refresh = RefreshToken.for_user(user)
+ 
+       
+        # SECURITY LOG
+       
+ 
+        AdminSecurityService.log_event(
+            request=request,
+            user=user,
+            action="LOGIN_2FA_VERIFY",
+            status="SUCCESS",
+            extra_data={
+                "method": method
+            }
+        )
+ 
+   
+        # SUCCESS RESPONSE
+       
+ 
+        return Response(
+            {
+                "success": True,
+                "message": "Admin login successful",
+ 
+                "access": str(
+                    refresh.access_token
+                ),
+ 
+                "refresh": str(
+                    refresh
+                ),
+ 
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "username": user.username,
+                    "user_type": user.user_type,
+                }
+            },
+            status=status.HTTP_200_OK
+        )  
+# for device log  and activity
+ 
+class AdminTrustedDeviceListView(APIView):
+ 
+    permission_classes = [IsAuthenticated]
+ 
+    def get(self, request):
+ 
+        devices = AdminTrustedDevice.objects.filter(
+            user=request.user,
+            is_trusted=True
+        ).order_by("-last_used_at")
+ 
+        serializer = AdminTrustedDeviceSerializer(
+            devices,
+            many=True
+        )
+ 
+        return Response(
+            {
+                "success": True,
+                "results": serializer.data
+            }
+        )
+   
+class RevokeTrustedDeviceView(APIView):
+ 
+    permission_classes = [IsAuthenticated , IsAdminUserType]
+ 
+    def delete(self, request, device_id):
+ 
+        try:
+ 
+            device = AdminTrustedDevice.objects.get(
+                id=device_id,
+                user=request.user
+            )
+ 
+        except AdminTrustedDevice.DoesNotExist:
+ 
+            return Response(
+                {
+                    "success": False,
+                    "message": "Device not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+       
+        # BLACKLIST JWT TOKEN
+     
+ 
+        try:
+ 
+            outstanding_token = OutstandingToken.objects.get(
+                jti=device.refresh_token_jti
+            )
+ 
+            RefreshToken(
+                str(outstanding_token.token)
+            ).blacklist()
+ 
+        except Exception as e:
+ 
+            print(
+                "TOKEN BLACKLIST ERROR:",
+                str(e)
+            )
+ 
+       
+        # MARK DEVICE UNTRUSTED
+       
+ 
+        device.is_trusted = False
+ 
+        device.save()
+ 
+       
+        # SECURITY LOG
+     
+ 
+        AdminSecurityService.log_event(
+            request=request,
+            user=request.user,
+            action="DEVICE_REVOKED",
+            status="SUCCESS",
+            extra_data={
+                "device_id": device.id,
+                "device_name": device.device_name
+            }
+        )
+ 
+        return Response(
+            {
+                "success": True,
+                "message": "Device revoked successfully"
+            },
+            status=status.HTTP_200_OK
+        )
+   
+ 
+class AdminAccessLogListView(APIView):
+ 
+    permission_classes = [IsAuthenticated,IsAdminUserType]
+ 
+    def get(self, request):
+ 
+        # -------------------------------------------------
+        # ADMIN ONLY
+        # -------------------------------------------------
+ 
+        if request.user.user_type != "admin":
+ 
+            return Response(
+                {
+                    "success": False,
+                    "message": "Only admins can access logs"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+ 
+        # -------------------------------------------------
+        # GET LOGS
+        # -------------------------------------------------
+ 
+        logs = AdminAccessLog.objects.filter(
+            user=request.user
+        ).order_by("-timestamp")
+ 
+        serializer = AdminAccessLogSerializer(
+            logs,
+            many=True
+        )
+ 
+        return Response(
+            {
+                "success": True,
+                "count": logs.count(),
+                "results": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+ 
  

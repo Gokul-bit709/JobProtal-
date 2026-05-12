@@ -10,8 +10,9 @@ from .models import (
     NewsletterSubscriber, Notification, Conversation, Message, ContactMessage, 
     CompanyVerification, Complaint, CompanyProfile, UserSettings, 
     HelpTopic, RaiseTicket, PasswordResetToken, EmailOTP, ChatMessage, Plan, Subscription,
-    Invoice, PaymentMethod,
+    Invoice, PaymentMethod,AdminAccessLog, AdminTrustedDevice
 )
+from .services import Admin2FAService 
  
 User = get_user_model()
 
@@ -23,43 +24,131 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
+# class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+#     """
+#     Custom serializer that accepts BOTH username and email
+#     No field validation - accepts any string for username/email
+#     """
+    
+#     # ✅ CRITICAL: Override fields to remove EmailField validation
+#     def __init__(self, *args, **kwargs):
+#         super().__init__(*args, **kwargs)
+        
+#         # Remove default fields and add custom ones
+#         self.fields.clear()
+#         self.fields['username'] = serializers.CharField(required=False, allow_blank=True, write_only=True)
+#         self.fields['email'] = serializers.CharField(required=False, allow_blank=True, write_only=True)
+#         self.fields['password'] = serializers.CharField(write_only=True, required=True)
+
+#     def validate(self, attrs):
+#         # Get login value - try both fields
+#         login_value = attrs.get('username') or attrs.get('email')
+#         password = attrs.get('password')
+
+#         print(f"🔍 Login attempt with: '{login_value}'")
+#         print(f"🔍 Received attrs: {attrs}")
+
+#         if not login_value:
+#             raise serializers.ValidationError({
+#                 "detail": ["Username or Email is required"]
+#             })
+
+#         if not password:
+#             raise serializers.ValidationError({
+#                 "detail": ["Password is required"]
+#             })
+
+#         # ✅ Find user by username OR email
+#         user = None
+        
+#         # Try to find by exact match first
+#         try:
+#             user = User.objects.get(
+#                 Q(username__iexact=login_value) | Q(email__iexact=login_value)
+#             )
+#             print(f"📊 User found via direct lookup: {user.username}")
+#         except User.DoesNotExist:
+#             print(f"❌ No user found for: {login_value}")
+#             raise serializers.ValidationError({
+#                 "detail": ["No account found with this email or username."]
+#             })
+#         except User.MultipleObjectsReturned:
+#             print(f"⚠️ Multiple users found, taking first")
+#             user = User.objects.filter(
+#                 Q(username__iexact=login_value) | Q(email__iexact=login_value)
+#             ).first()
+
+#         # ✅ Check password
+#         if not user.check_password(password):
+#             print(f"❌ Password check failed for: {user.username}")
+#             raise serializers.ValidationError({
+#                 "detail": ["Incorrect password."]
+#             })
+
+#         if not user.is_active:
+#             raise serializers.ValidationError({
+#                 "detail": ["This account is inactive."]
+#             })
+#         from django.utils import timezone
+#         user.login_time = timezone.now()
+#         user.save(update_fields=["login_time"])
+        
+#         print(f"✅ Login successful for: {user.username}")
+
+#         # ✅ Generate tokens
+#         refresh = RefreshToken.for_user(user)
+
+#         return {
+#             'refresh': str(refresh),
+#             'access': str(refresh.access_token),
+#             'user': {
+#                 'id': user.id,
+#                 'email': user.email,
+#                 'username': user.username,
+#                 'user_type': user.user_type,
+#                 'phone': user.phone,
+#                 'is_online': user.is_online
+#             }
+#         }
+ 
+  
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """
     Custom serializer that accepts BOTH username and email
     No field validation - accepts any string for username/email
     """
-    
-    # ✅ CRITICAL: Override fields to remove EmailField validation
+   
+    # CRITICAL: Override fields to remove EmailField validation
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+       
         # Remove default fields and add custom ones
         self.fields.clear()
         self.fields['username'] = serializers.CharField(required=False, allow_blank=True, write_only=True)
         self.fields['email'] = serializers.CharField(required=False, allow_blank=True, write_only=True)
         self.fields['password'] = serializers.CharField(write_only=True, required=True)
-
+ 
     def validate(self, attrs):
         # Get login value - try both fields
         login_value = attrs.get('username') or attrs.get('email')
         password = attrs.get('password')
-
+ 
         print(f"🔍 Login attempt with: '{login_value}'")
         print(f"🔍 Received attrs: {attrs}")
-
+ 
         if not login_value:
             raise serializers.ValidationError({
                 "detail": ["Username or Email is required"]
             })
-
+ 
         if not password:
             raise serializers.ValidationError({
                 "detail": ["Password is required"]
             })
-
-        # ✅ Find user by username OR email
+ 
+        #  Find user by username OR email
         user = None
-        
+       
         # Try to find by exact match first
         try:
             user = User.objects.get(
@@ -68,6 +157,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             print(f"📊 User found via direct lookup: {user.username}")
         except User.DoesNotExist:
             print(f"❌ No user found for: {login_value}")
+ 
             raise serializers.ValidationError({
                 "detail": ["No account found with this email or username."]
             })
@@ -76,27 +166,127 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             user = User.objects.filter(
                 Q(username__iexact=login_value) | Q(email__iexact=login_value)
             ).first()
-
-        # ✅ Check password
+ 
+        #  Check password
         if not user.check_password(password):
             print(f"❌ Password check failed for: {user.username}")
+ 
+ 
+ 
+            if user.user_type == "admin":  #added on 11/05
+                AdminSecurityService.log_event(
+                    request=self.context.get("request"),
+                    user=user,
+                    action="LOGIN_FAILED",
+                    status="FAILED",
+                    extra_data={
+                        "reason": "Incorrect password"
+                    }
+                )
+ 
             raise serializers.ValidationError({
                 "detail": ["Incorrect password."]
             })
-
+ 
         if not user.is_active:
             raise serializers.ValidationError({
                 "detail": ["This account is inactive."]
             })
+               
+        # UPDATE LOGIN TIME
+       
+ 
+        from django.utils import timezone
+ 
+        user.login_time = timezone.now()
+ 
+        user.save(update_fields=["login_time"])
+ 
+       
+        # ADMIN SECURITY LOG
+        # ONLY FOR ADMIN USERS
+ 
+        if user.user_type == "admin":#added on 11/05
+ 
+            AdminSecurityService.log_event(
+                request=self.context.get("request"),
+                user=user,
+                action="LOGIN_SUCCESS",
+                status="SUCCESS",
+                extra_data={
+                    "login_method": "username/email"
+                }
+            )
         from django.utils import timezone
         user.login_time = timezone.now()
         user.save(update_fields=["login_time"])
-        
+       
         print(f"✅ Login successful for: {user.username}")
-
+ 
+ 
+        from django.utils import timezone #change on 11/05
+        from datetime import timedelta
+        # Password expiry check
+        if user.password_changed_at:
+ 
+            expiry_date = (
+                user.password_changed_at +
+                timedelta(days=user.password_expiry_days)
+            )
+ 
+            if timezone.now() > expiry_date:
+ 
+                raise serializers.ValidationError({
+                    "detail": [
+                        "Password expired. Please reset your password."
+                    ],
+                    "password_expired": True
+                })
+ 
+        # ADMIN LOGIN 2FA CHECK
+       
+        admin_2fa_response = (
+            Admin2FAService.handle_admin_login_2fa(  # added on 12/05
+                user
+            )
+        )
+ 
+        if admin_2fa_response:
+ 
+            return admin_2fa_response
+       
+ 
         # ✅ Generate tokens
         refresh = RefreshToken.for_user(user)
-
+ 
+ 
+        if user.user_type == "admin": #newly added on 11/05
+ 
+            user_agent = self.context["request"].META.get(
+                "HTTP_USER_AGENT",
+                ""
+            )
+ 
+            AdminTrustedDevice.objects.update_or_create(
+ 
+                user=user,
+ 
+                device_fingerprint=user_agent,
+ 
+                defaults={
+ 
+                    "device_name": user_agent[:200],
+ 
+                    "platform": "web",
+ 
+                    "refresh_token_jti": str(
+                        refresh["jti"]
+                    ),
+ 
+                    "is_trusted": True,
+                }
+            )
+ 
         return {
             'refresh': str(refresh),
             'access': str(refresh.access_token),
@@ -109,6 +299,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'is_online': user.is_online
             }
         }
+ 
+ 
  
  
 # User Serializers
@@ -1741,3 +1933,64 @@ class EmployerRoleSerializer(serializers.ModelSerializer):
 
     def get_joined_date(self, obj):
         return obj.date_joined.strftime('%b %d, %Y') if obj.date_joined else '—'
+    
+
+
+ 
+#for security setting
+from .models import AdminAccessLog, AdminTrustedDevice
+class AdminTrustedDeviceSerializer(serializers.ModelSerializer):
+ 
+    name = serializers.CharField(
+        source="device_name",
+        read_only=True
+    )
+ 
+    class Meta:
+ 
+        model = AdminTrustedDevice
+ 
+        fields = [
+            "id",
+            "device_name",
+            "name",
+            "platform",
+            "is_trusted",
+            "last_used_at",
+            "created_at",
+        ]
+ 
+ 
+class AdminAccessLogSerializer(serializers.ModelSerializer):
+ 
+    ip = serializers.CharField(
+        source="ip_address",
+        read_only=True
+    )
+ 
+    date = serializers.DateTimeField(
+        source="timestamp",
+        read_only=True
+    )
+ 
+    class Meta:
+ 
+        model = AdminAccessLog
+ 
+        fields = [
+            "id",
+            "action",
+            "status",
+ 
+            "ip_address",
+            "ip",
+ 
+            "location",
+ 
+            "timestamp",
+            "date",
+ 
+            "user_agent",
+            "extra_data",
+        ]
+ 

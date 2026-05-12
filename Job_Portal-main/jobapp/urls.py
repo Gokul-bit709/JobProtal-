@@ -2,6 +2,9 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     AJobListView,
+    Admin2FAStatusView,
+    AdminAccessLogListView,
+    AdminChangePasswordView,
     AdminCompanyListView,
     AdminDashboardOverviewView,
     AdminDashboardStats,
@@ -12,10 +15,12 @@ from .views import (
     AdminJobRejectView,
     AdminJobStatsView,
     AdminLoginView,
+    AdminTrustedDeviceListView,
     AdminUpdateComplaintView,
     ApplicationFlagReadStatusView,
     CompanyProfileCreateView,
     DashboardView,
+    DisableAdmin2FAView,
     JobApplicationReportView,
     JobSeekerRegistrationView,
     EmployerRegistrationView,
@@ -27,6 +32,8 @@ from .views import (
     DeleteNotificationView,
     ClearAllNotificationsView,
     NewsletterSubscribeAPIView,
+    RevokeTrustedDeviceView,
+    SendAdmin2FAOTPView,
     SubmitComplaintView,
     UpdateCompanyStatusView,
     UserListView,
@@ -45,6 +52,8 @@ from .views import (
     EmployerInitiateChatView,
     UserStatsView,
     UserStatusUpdateView,
+    VerifyAdmin2FAOTPView,
+    VerifyAdminLoginOTPView,
     VerifyEmailOTPView,
     chat_api,
     ForgotPasswordView,
@@ -304,6 +313,32 @@ urlpatterns = [
  
     path("notification-channels/",NotificationChannelSettingsView.as_view(),name="notification-channels"),
     path("notification-channels/update/",NotificationChannelSettingsUpdateView.as_view(),name="notification-channels-update"),
+
+
+
+ 
+    #admin security settings
+ 
+    #for cat -1 password
+    path("admin-change-password/",AdminChangePasswordView.as_view(),name="admin-change-password"),
+ 
+    # for cat-2 device log
+    path("admin-trusted-devices/", AdminTrustedDeviceListView.as_view(),),
+    path("admin-trusted-devices/<int:device_id>/",RevokeTrustedDeviceView.as_view(),),
+    path("admin-access-log/",AdminAccessLogListView.as_view(),),
+ 
+   
+    # for cat - 3Admin 2FA
+ 
+    path("admin/2fa/status/", Admin2FAStatusView.as_view(), name="admin-2fa-status"),
+    path("admin-2fa/login/verify-otp/",VerifyAdminLoginOTPView.as_view(),name="admin-login-verify-otp"),
+ 
+    path("admin/2fa/send-otp/",SendAdmin2FAOTPView.as_view(),name="admin-2fa-send-otp"),
+ 
+    path("admin/2fa/verify-otp/",VerifyAdmin2FAOTPView.as_view(),name="admin-2fa-verify-otp"),
+ 
+    path("admin/2fa/disable/", DisableAdmin2FAView.as_view(),name="admin-2fa-disable"),
+ 
  
 ]
 

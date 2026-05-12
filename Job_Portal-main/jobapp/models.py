@@ -25,6 +25,9 @@ class User(AbstractUser):
         choices=AccountStatus.choices,
         default=AccountStatus.ACTIVE
     )
+    password_changed_at = models.DateTimeField(null=True,blank=True)
+    password_expiry_days = models.IntegerField(default=30)
+ 
     
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username', 'user_type']
@@ -146,6 +149,16 @@ class AdminProfile(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    two_factor_enabled = models.BooleanField(default=False)   
+    two_factor_method = models.CharField(            
+        max_length=10,
+        choices=[
+            ("email", "Email"),
+            ("sms", "SMS")
+        ],
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return f"Admin: {self.user.email}"
@@ -1239,4 +1252,155 @@ class NotificationChannelSettings(models.Model): #newly added 08/05
     def __str__(self):
         return "Notification Channel Settings"
  
+
+
+
+ 
+class SMSOTP(models.Model):           
+ 
+    PURPOSE_CHOICES = [
+        ("admin_2fa", "Admin 2FA"),
+        ("login", "Login"),
+    ]
+ 
+    phone = models.CharField(max_length=15)
+ 
+    otp = models.CharField(max_length=6)
+ 
+    purpose = models.CharField(
+        max_length=50,
+        choices=PURPOSE_CHOICES
+    )
+ 
+    is_verified = models.BooleanField(default=False)
+ 
+    created_at = models.DateTimeField(auto_now_add=True)
+ 
+    expires_at = models.DateTimeField()
+ 
+    def is_valid(self):
+        return timezone.now() < self.expires_at
+ 
+    def __str__(self):
+        return f"{self.phone} - {self.purpose}"
+   
+ 
+ 
+class AdminAccessLog(models.Model):  
+ 
+    ACTION_CHOICES = [
+        ("LOGIN_SUCCESS", "Login Success"),
+        ("LOGIN_FAILED", "Login Failed"),
+        ("LOGOUT", "Logout"),
+        ("PASSWORD_CHANGE", "Password Change"),
+        ("2FA_ENABLED", "2FA Enabled"),
+        ("2FA_DISABLED", "2FA Disabled"),
+        ("OTP_FAILED", "OTP Failed"),
+        ("DEVICE_REVOKED", "Device Revoked"),
+        ("DEVICE_ADDED", "Device Added"),
+    ]
+ 
+    STATUS_CHOICES = [
+        ("SUCCESS", "Success"),
+        ("FAILED", "Failed"),
+    ]
+ 
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="admin_access_logs"
+    )
+ 
+    action = models.CharField(
+        max_length=50,
+        choices=ACTION_CHOICES
+    )
+ 
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES
+    )
+ 
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True
+    )
+ 
+    location = models.CharField(
+        max_length=255,
+        blank=True
+    )
+ 
+    user_agent = models.TextField(
+        blank=True
+    )
+ 
+    extra_data = models.JSONField(
+        default=dict,
+        blank=True
+    )
+ 
+    timestamp = models.DateTimeField(
+        auto_now_add=True
+    )
+ 
+    class Meta:
+        ordering = ["-timestamp"]
+ 
+    def __str__(self):
+        return f"{self.user} - {self.action}"
+ 
+ 
+class AdminTrustedDevice(models.Model): #changed on 11/05
+ 
+    PLATFORM_CHOICES = [
+        ("web", "Web"),
+        ("android", "Android"),
+        ("ios", "iOS"),
+    ]
+ 
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="trusted_devices"
+    )
+ 
+    device_name = models.CharField(
+        max_length=200
+    )
+ 
+    device_fingerprint = models.CharField(
+        max_length=255,
+        blank=True
+    )
+ 
+    platform = models.CharField(
+        max_length=20,
+        choices=PLATFORM_CHOICES,
+        default="web"
+    )
+ 
+    refresh_token_jti = models.CharField(
+        max_length=255,
+        blank=True
+    )
+ 
+    is_trusted = models.BooleanField(
+        default=True
+    )
+ 
+    last_used_at = models.DateTimeField(
+        auto_now=True
+    )
+ 
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+ 
+    class Meta:
+        ordering = ["-last_used_at"]
+ 
+    def __str__(self):
+        return f"{self.user.email} - {self.device_name}"
  

@@ -73,6 +73,11 @@ MIDDLEWARE = [
     
 ]
 
+# GeoIP DB path (project currently keeps mmdb under jobapp/geoip)
+GEOIP_PATH = BASE_DIR / "jobapp" / "geoip"
+GEOIP_CITY = "GeoLite2-City.mmdb"
+
+
 CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOW_CREDENTIALS = True

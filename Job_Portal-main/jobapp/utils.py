@@ -89,6 +89,54 @@ def generate_4digit_otp():
     """Generate a 4-digit OTP for login"""
     return str(random.randint(1000, 9999))
  
+# def send_email_otp(email, otp, purpose="signup"):
+#     """Send OTP email based on purpose"""
+   
+#     if purpose == "signup" or purpose == "email_verification":
+#         subject = "Email Verification OTP"
+#         expiry = "10 minutes"
+#         digits = "6-digit"
+#         message = f"""
+# Hello,
+ 
+# Your {digits} OTP for email verification is: {otp}
+ 
+# This OTP will expire in {expiry}.
+ 
+# If you didn't request this, please ignore this email.
+# """
+#     elif purpose == "login":
+#         subject = "Login OTP"
+#         expiry = "5 minutes"
+#         digits = "4-digit"
+#         message = f"""
+# Hello,
+ 
+# Your {digits} OTP for login is: {otp}
+ 
+# This OTP will expire in {expiry}.
+ 
+# If you didn't request this, please ignore this email.
+# """
+#     else:
+#         subject = "OTP Verification"
+#         expiry = "10 minutes"
+#         message = f"""
+# Hello,
+ 
+# Your OTP is: {otp}
+ 
+# This OTP will expire in {expiry}.
+# """
+ 
+#     send_mail(
+#         subject,
+#         message,
+#         settings.EMAIL_HOST_USER,
+#         [email],
+#         fail_silently=False,
+#     )
+
 def send_email_otp(email, otp, purpose="signup"):
     """Send OTP email based on purpose"""
    
@@ -118,6 +166,19 @@ This OTP will expire in {expiry}.
  
 If you didn't request this, please ignore this email.
 """
+    elif purpose == "admin_2fa":
+        subject = "Admin 2FA OTP"
+        expiry = "5 minutes"
+        digits = "6-digit"
+        message = f"""
+Hello,
+ 
+Your {digits} OTP for admin two-factor authentication is: {otp}
+ 
+This OTP will expire in {expiry}.
+ 
+If you didn't request this, please secure your account immediately.
+"""
     else:
         subject = "OTP Verification"
         expiry = "10 minutes"
@@ -132,10 +193,11 @@ This OTP will expire in {expiry}.
     send_mail(
         subject,
         message,
-        settings.EMAIL_HOST_USER,
+        settings.DEFAULT_FROM_EMAIL,
         [email],
         fail_silently=False,
     )
+ 
 
 # Billing
 # jobapp/utils.py
