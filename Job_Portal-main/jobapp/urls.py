@@ -6,7 +6,8 @@ from .views import (
     AdminAccessLogListView,
     AdminChangePasswordView,
     AdminCompanyListView,
-    AdminDashboardOverviewView,
+    AdminDashboardOverviewNewView,
+    # AdminDashboardOverviewView,
     AdminDashboardStats,
     AdminJobApproveView,
     AdminJobDeleteView,
@@ -152,7 +153,7 @@ urlpatterns = [
     # Jobs
     path('jobs/', views.JobListView.as_view(), name='job-list'),
     path('jobs/<int:pk>/', views.JobDetailView.as_view(), name='job-detail'),
-     path("jobs/<int:job_id>/similar/", SimilarJobsAPIView.as_view(), name="similar-jobs"),
+    path("jobs/<int:job_id>/similar/", SimilarJobsAPIView.as_view(), name="similar-jobs"),
     path('jobs/create/', views.JobCreateView.as_view(), name='job-create'),
     path('jobs/<int:pk>/update/', views.JobUpdateView.as_view(), name='job-update'),
     path('jobs/<int:pk>/delete/', views.JobDeleteView.as_view(), name='job-delete'),
@@ -281,10 +282,12 @@ urlpatterns = [
     path('users/', UserListView.as_view(), name='user-list'),
     path('users/<int:pk>/status/', UserStatusUpdateView.as_view(), name='user-status-update'),
     path('users/stats/', UserStatsView.as_view(), name='user-stats'),
-    #admin dashboard
-    path('admin/dashboard/', AdminDashboardStats.as_view()),
-    path('admin/jobs/', AJobListView.as_view()),
-    path('admin/dashboard/overview/', AdminDashboardOverviewView.as_view(), name='admin-dashboard-overview'),
+    # #admin dashboard
+    # path('admin/dashboard/', AdminDashboardStats.as_view()),
+    # path('admin/jobs/', AJobListView.as_view()),
+    # path('admin/dashboard/overview/', AdminDashboardOverviewView.as_view(), name='admin-dashboard-overview'),
+    path('admin/dashboard/',AdminDashboardOverviewNewView.as_view(),name='admin-dashboard-view'),
+
     #admin JobMonitoring
     path('admin/jobs/', AdminJobListView.as_view(), name='admin-job-list'),
     path('admin/jobs/<int:pk>/approve/', AdminJobApproveView.as_view(), name='admin-job-approve'),
@@ -357,6 +360,7 @@ urlpatterns = [
     # jobseekersetting
 
     path('jobseeker/settings/',JobseekerPlatformSettingsView.as_view(),name='jobseeker-platform-settings')
+
  
  
 ]

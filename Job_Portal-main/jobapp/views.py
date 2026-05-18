@@ -4732,89 +4732,89 @@ class AdminJobStatsView(APIView):
 
 # ============ ADMIN DASHBOARD WIDGETS ============
 
-class AdminDashboardOverviewView(APIView):
-    """
-    Powers two widgets on the Admin Dashboard:
-    1. Top Experience Levels  — applicants bucketed by years of experience
-    2. Total Overview         — donut chart of application pipeline stages
-    """
-    permission_classes = [IsAdminUserType]
+# class AdminDashboardOverviewView(APIView):
+#     """
+#     Powers two widgets on the Admin Dashboard:
+#     1. Top Experience Levels  — applicants bucketed by years of experience
+#     2. Total Overview         — donut chart of application pipeline stages
+#     """
+#     permission_classes = [IsAdminUserType]
 
-    def get(self, request):
+#     def get(self, request):
 
-        # ── 1. TOTAL OVERVIEW (donut chart) ──────────────────────────────────
-        # Map your JobApplication.Status values to the frontend labels
-        from django.db.models import Count
+#         # ── 1. TOTAL OVERVIEW (donut chart) ──────────────────────────────────
+#         # Map your JobApplication.Status values to the frontend labels
+#         from django.db.models import Count
 
-        application_counts = JobApplication.objects.aggregate(
-            applicants   = Count('id', filter=Q(status=JobApplication.Status.APPLIED)),
-            recommended  = Count('id', filter=Q(status=JobApplication.Status.RECRUITER_REVIEW)),
-            shortlisted  = Count('id', filter=Q(status=JobApplication.Status.SHORTLISTED)),
-            interview    = Count('id', filter=Q(status=JobApplication.Status.INTERVIEW_CALLED)),
-            rejected     = Count('id', filter=Q(status=JobApplication.Status.REJECTED)),
-            hired        = Count('id', filter=Q(status=JobApplication.Status.HIRED)),
-        )
+#         application_counts = JobApplication.objects.aggregate(
+#             applicants   = Count('id', filter=Q(status=JobApplication.Status.APPLIED)),
+#             recommended  = Count('id', filter=Q(status=JobApplication.Status.RECRUITER_REVIEW)),
+#             shortlisted  = Count('id', filter=Q(status=JobApplication.Status.SHORTLISTED)),
+#             interview    = Count('id', filter=Q(status=JobApplication.Status.INTERVIEW_CALLED)),
+#             rejected     = Count('id', filter=Q(status=JobApplication.Status.REJECTED)),
+#             hired        = Count('id', filter=Q(status=JobApplication.Status.HIRED)),
+#         )
 
-        total_candidates = sum(application_counts.values())
+#         total_candidates = sum(application_counts.values())
 
-        total_overview = {
-            "total_candidates": total_candidates,
-            "recommended": application_counts["recommended"],
-            "shortlisted": application_counts["shortlisted"],
-            "applicants":  application_counts["applicants"],
-            "interview":   application_counts["interview"],
-            "rejected":    application_counts["rejected"],
-            "hired":       application_counts["hired"],
-        }
+#         total_overview = {
+#             "total_candidates": total_candidates,
+#             "recommended": application_counts["recommended"],
+#             "shortlisted": application_counts["shortlisted"],
+#             "applicants":  application_counts["applicants"],
+#             "interview":   application_counts["interview"],
+#             "rejected":    application_counts["rejected"],
+#             "hired":       application_counts["hired"],
+#         }
 
-        # ── 2. TOP EXPERIENCE LEVELS (bar chart) ─────────────────────────────
-        # Uses total_experience_years on JobSeekerProfile
-        # Buckets:  Entry (0–1), Junior (1–3), Mid (3–6), Senior (6+)
+#         # ── 2. TOP EXPERIENCE LEVELS (bar chart) ─────────────────────────────
+#         # Uses total_experience_years on JobSeekerProfile
+#         # Buckets:  Entry (0–1), Junior (1–3), Mid (3–6), Senior (6+)
 
-        from .models import JobSeekerProfile
+#         from .models import JobSeekerProfile
 
-        profiles = JobSeekerProfile.objects.filter(
-            total_experience_years__isnull=False
-        ).values_list('total_experience_years', flat=True)
+#         profiles = JobSeekerProfile.objects.filter(
+#             total_experience_years__isnull=False
+#         ).values_list('total_experience_years', flat=True)
 
-        entry  = sum(1 for y in profiles if float(y) <= 1)
-        junior = sum(1 for y in profiles if 1 < float(y) <= 3)
-        mid    = sum(1 for y in profiles if 3 < float(y) <= 6)
-        senior = sum(1 for y in profiles if float(y) > 6)
+#         entry  = sum(1 for y in profiles if float(y) <= 1)
+#         junior = sum(1 for y in profiles if 1 < float(y) <= 3)
+#         mid    = sum(1 for y in profiles if 3 < float(y) <= 6)
+#         senior = sum(1 for y in profiles if float(y) > 6)
 
-        max_count = max(entry, junior, mid, senior, 1)  # avoid div-by-zero
+#         max_count = max(entry, junior, mid, senior, 1)  # avoid div-by-zero
 
-        experience_levels = [
-            {
-                "label":      "Entry Level",
-                "count":      entry,
-                "percentage": round((entry / max_count) * 100),
-            },
-            {
-                "label":      "Junior Level",
-                "count":      junior,
-                "percentage": round((junior / max_count) * 100),
-            },
-            {
-                "label":      "Mid Level",
-                "count":      mid,
-                "percentage": round((mid / max_count) * 100),
-            },
-            {
-                "label":      "Senior Level",
-                "count":      senior,
-                "percentage": round((senior / max_count) * 100),
-            },
-        ]
+#         experience_levels = [
+#             {
+#                 "label":      "Entry Level",
+#                 "count":      entry,
+#                 "percentage": round((entry / max_count) * 100),
+#             },
+#             {
+#                 "label":      "Junior Level",
+#                 "count":      junior,
+#                 "percentage": round((junior / max_count) * 100),
+#             },
+#             {
+#                 "label":      "Mid Level",
+#                 "count":      mid,
+#                 "percentage": round((mid / max_count) * 100),
+#             },
+#             {
+#                 "label":      "Senior Level",
+#                 "count":      senior,
+#                 "percentage": round((senior / max_count) * 100),
+#             },
+#         ]
 
-        return Response({
-            "experience_levels": experience_levels,
-            "total_overview":    total_overview,
-        }, status=status.HTTP_200_OK)
+#         return Response({
+#             "experience_levels": experience_levels,
+#             "total_overview":    total_overview,
+#         }, status=status.HTTP_200_OK)
     
  
 class JobApplicationReportView(APIView):
-    #permission_classes = [IsAuthenticated, IsAdminUserType]
+    permission_classes = [IsAuthenticated, IsAdminUserType]
  
     def get(self, request):
         now = timezone.now()
@@ -7059,3 +7059,693 @@ class JobseekerPlatformSettingsView(APIView):
 
             status=status.HTTP_200_OK
         )
+    
+
+class AdminDashboardOverviewNewView(APIView):
+ 
+    # permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def get(self, request):
+ 
+        now = timezone.now()
+ 
+        today_start = now.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0
+        )
+ 
+        yesterday_start = (
+            today_start - timedelta(days=1)
+        )
+ 
+        nine_months_ago = (
+            now - timedelta(days=270)
+        )
+ 
+        four_months_ago = (
+            now - timedelta(days=120)
+        )
+ 
+       
+        # USER STATS
+       
+ 
+        user_stats = User.objects.aggregate(
+ 
+            total_employers=Count(
+                "id",
+                filter=Q(user_type="employer")
+            ),
+ 
+            total_jobseekers=Count(
+                "id",
+                filter=Q(user_type="jobseeker")
+            ),
+ 
+            users_today=Count(
+                "id",
+                filter=Q(date_joined__gte=today_start)
+            ),
+ 
+            users_yesterday=Count(
+                "id",
+                filter=Q(
+                    date_joined__gte=yesterday_start,
+                    date_joined__lt=today_start
+                )
+            ),
+        )
+ 
+        # JOB STATS
+       
+ 
+        job_stats = PostAJob.objects.aggregate(
+ 
+            total_jobs=Count("id"),
+ 
+            jobs_today=Count(
+                "id",
+                filter=Q(created_at__gte=today_start)
+            ),
+ 
+            jobs_yesterday=Count(
+                "id",
+                filter=Q(
+                    created_at__gte=yesterday_start,
+                    created_at__lt=today_start
+                )
+            ),
+        )
+ 
+        # APPLICATION STATS
+       
+ 
+        application_stats = JobApplication.objects.aggregate(
+ 
+            apps_today=Count(
+                "id",
+                filter=Q(applied_date__gte=today_start)
+            ),
+ 
+            apps_yesterday=Count(
+                "id",
+                filter=Q(
+                    applied_date__gte=yesterday_start,
+                    applied_date__lt=today_start
+                )
+            ),
+        )
+ 
+        # REVENUE STATS
+       
+ 
+        revenue_stats = Payment.objects.filter(
+            status="success"
+        ).aggregate(
+ 
+            rev_today=Coalesce(
+                Sum(
+                    "amount",
+                    filter=Q(created_at__gte=today_start)
+                ),
+                0,
+                output_field=DecimalField(),
+            ),
+ 
+            rev_yesterday=Coalesce(
+                Sum(
+                    "amount",
+                    filter=Q(
+                        created_at__gte=yesterday_start,
+                        created_at__lt=today_start
+                    )
+                ),
+                0,
+                output_field=DecimalField(),
+            ),
+        )
+ 
+       
+        # SUBSCRIBER STATS
+       
+ 
+        subscriber_stats = Subscription.objects.filter(
+            status="active"
+        ).aggregate(
+ 
+            subs_today=Count(
+                "id",
+                filter=Q(start_date__gte=today_start)
+            ),
+ 
+            subs_yesterday=Count(
+                "id",
+                filter=Q(
+                    start_date__gte=yesterday_start,
+                    start_date__lt=today_start,
+                ),
+            ),
+        )
+ 
+     
+        # OVERVIEW STATS
+     
+ 
+        total_companies = CompanyProfile.objects.count()
+ 
+        overview_stats = [
+ 
+            {
+                "label": "All Jobs",
+                "count": job_stats["total_jobs"],
+                "tabName": "Job Monitoring",
+            },
+ 
+            {
+                "label": "Total Companies",
+                "count": total_companies,
+                "tabName": "Activity Monitoring",
+            },
+ 
+            {
+                "label": "Total Employers",
+                "count": user_stats["total_employers"],
+                "query": "Employers",
+            },
+ 
+            {
+                "label": "Total Jobseekers",
+                "count": user_stats["total_jobseekers"],
+                "query": "Jobseeker",
+            },
+        ]
+ 
+        # JOB POSTINGS CHART
+       
+ 
+        job_monthly_rows = list(
+ 
+            PostAJob.objects
+ 
+            .filter(
+                created_at__gte=nine_months_ago
+            )
+ 
+            .annotate(
+                month=TruncMonth("created_at")
+            )
+ 
+            .values("month")
+ 
+            .annotate(
+                postings=Count("id"),
+ 
+                recent_postings=Count(
+                    "id",
+                    filter=Q(
+                        created_at__gte=four_months_ago
+                    )
+                ),
+            )
+ 
+            .order_by("month")
+        )
+ 
+        job_postings_map = {
+ 
+            _month_label(row["month"]): row["postings"]
+ 
+            for row in job_monthly_rows
+        }
+ 
+        job_posting_months = []
+ 
+        for i in range(8, -1, -1):
+ 
+            job_posting_months.append(
+                _month_label(
+                    now - timedelta(days=30 * i)
+                )
+            )
+ 
+        job_postings_chart = [
+ 
+            {
+                "name": month,
+ 
+                "postings": job_postings_map.get(month, 0)
+            }
+ 
+            for month in job_posting_months
+        ]
+ 
+       
+        # HIGHLIGHTED JOBS
+       
+ 
+        highlighted_jobs_qs = (
+ 
+            PostAJob.objects
+ 
+            .filter(
+                is_highlighted=True
+            )
+ 
+            .order_by("-highlighted_at")
+ 
+            .values(
+                "id",
+                "job_title",
+                "created_at",
+                "highlighted_at"
+            )[:4]
+        )
+ 
+        highlighted_jobs = [
+ 
+            {
+                "id": job["id"],
+ 
+                "title": job["job_title"],
+ 
+                "posted": (
+                    job["created_at"].strftime("%d %b %Y")
+                    if job["created_at"]
+                    else "—"
+                ),
+ 
+                "highlightOn": (
+                    job["highlighted_at"].strftime("%d %b %Y")
+                    if job["highlighted_at"]
+                    else "—"
+                ),
+ 
+                "isHighlighted": True,
+            }
+ 
+            for job in highlighted_jobs_qs
+        ]
+ 
+       
+        # ADMIN STATS
+       
+ 
+        users_today = user_stats["users_today"]
+        users_yesterday = user_stats["users_yesterday"]
+ 
+        jobs_today = job_stats["jobs_today"]
+        jobs_yesterday = job_stats["jobs_yesterday"]
+ 
+        apps_today = application_stats["apps_today"]
+        apps_yesterday = application_stats["apps_yesterday"]
+ 
+        rev_today = revenue_stats["rev_today"]
+        rev_yesterday = revenue_stats["rev_yesterday"]
+ 
+        subs_today = subscriber_stats["subs_today"]
+        subs_yesterday = subscriber_stats["subs_yesterday"]
+ 
+        admin_stats = [
+ 
+            {
+                "title": "Total Users",
+ 
+                "value": str(users_today),
+ 
+                "trend": _trend(
+                    users_today,
+                    users_yesterday
+                ),
+ 
+                "isUp": _is_up(
+                    users_today,
+                    users_yesterday
+                ),
+            },
+ 
+            {
+                "title": "Total Jobs Posted",
+ 
+                "value": str(jobs_today),
+ 
+                "trend": _trend(
+                    jobs_today,
+                    jobs_yesterday
+                ),
+ 
+                "isUp": _is_up(
+                    jobs_today,
+                    jobs_yesterday
+                ),
+            },
+ 
+            {
+                "title": "Total Applications",
+ 
+                "value": str(apps_today),
+ 
+                "trend": _trend(
+                    apps_today,
+                    apps_yesterday
+                ),
+ 
+                "isUp": _is_up(
+                    apps_today,
+                    apps_yesterday
+                ),
+            },
+ 
+            {
+                "title": "Total Revenue",
+ 
+                "value": str(rev_today),
+ 
+                "trend": _trend(
+                    float(rev_today),
+                    float(rev_yesterday)
+                ),
+ 
+                "isUp": _is_up(
+                    float(rev_today),
+                    float(rev_yesterday)
+                ),
+            },
+ 
+            {
+                "title": "Total Subscribers",
+ 
+                "value": str(subs_today),
+ 
+                "trend": _trend(
+                    subs_today,
+                    subs_yesterday
+                ),
+ 
+                "isUp": _is_up(
+                    subs_today,
+                    subs_yesterday
+                ),
+            },
+        ]
+ 
+       
+        # USER GROWTH CHART
+       
+ 
+        user_monthly_rows = list(
+ 
+            User.objects
+ 
+            .filter(
+                date_joined__gte=nine_months_ago
+            )
+ 
+            .annotate(
+                month=TruncMonth("date_joined")
+            )
+ 
+            .values("month")
+ 
+            .annotate(
+                users=Count("id"),
+ 
+                recent_users=Count(
+                    "id",
+                    filter=Q(
+                        date_joined__gte=four_months_ago
+                    )
+                ),
+            )
+ 
+            .order_by("month")
+        )
+ 
+        user_growth_map = {
+ 
+            _month_label(row["month"]): row["users"]
+ 
+            for row in user_monthly_rows
+        }
+ 
+        user_growth_months = []
+ 
+        for i in range(8, -1, -1):
+ 
+            user_growth_months.append(
+                _month_label(
+                    now - timedelta(days=30 * i)
+                )
+            )
+ 
+        user_growth_chart = [
+ 
+            {
+                "name": month,
+ 
+                "users": user_growth_map.get(month, 0)
+            }
+ 
+            for month in user_growth_months
+        ]
+ 
+        # ACTIVITIES CHART
+     
+ 
+        new_users_qs = {
+ 
+            _month_label(r["month"]): r["recent_users"]
+ 
+            for r in user_monthly_rows
+        }
+ 
+        jobs_posted_qs = {
+ 
+            _month_label(r["month"]): r["recent_postings"]
+ 
+            for r in job_monthly_rows
+        }
+ 
+        subs_qs = {
+ 
+            _month_label(r["month"]): r["cnt"]
+ 
+            for r in (
+ 
+                Subscription.objects
+ 
+                .filter(
+                    start_date__gte=four_months_ago,
+                    status="active"
+                )
+ 
+                .annotate(
+                    month=TruncMonth("start_date")
+                )
+ 
+                .values("month")
+ 
+                .annotate(
+                    cnt=Count("id")
+                )
+ 
+                .order_by("month")
+            )
+        }
+ 
+        activity_months = []
+ 
+        for i in range(3, -1, -1):
+ 
+            activity_months.append(
+                _month_label(
+                    now - timedelta(days=30 * i)
+                )
+            )
+ 
+        activities_chart = [
+ 
+            {
+                "name": m,
+ 
+                "newUsers": new_users_qs.get(m, 0),
+ 
+                "jobsPosted": jobs_posted_qs.get(m, 0),
+ 
+                "subscribers": subs_qs.get(m, 0),
+            }
+ 
+            for m in activity_months
+        ]
+ 
+        # EXPERIENCE LEVELS
+       
+ 
+        profiles = JobSeekerProfile.objects.filter(
+            total_experience_years__isnull=False
+        ).values_list(
+            'total_experience_years',
+            flat=True
+        )
+ 
+        entry = sum(
+            1 for y in profiles
+            if float(y) < 1
+        )
+ 
+        junior = sum(
+            1 for y in profiles
+            if 1 < float(y) <= 3
+        )
+ 
+        mid = sum(
+            1 for y in profiles
+            if 3 < float(y) <= 6
+        )
+ 
+        senior = sum(
+            1 for y in profiles
+            if float(y) > 6
+        )
+ 
+        total_experience_users = max(
+            entry + junior + mid + senior,
+            1
+        )
+ 
+        experience_levels = [
+ 
+            {
+                "label": "Entry Level",
+                "count": entry,
+                "percentage": round(
+                    (entry / total_experience_users) * 100
+                ),
+            },
+ 
+            {
+                "label": "Junior Level",
+                "count": junior,
+                "percentage": round(
+                    (junior / total_experience_users) * 100
+                ),
+            },
+ 
+            {
+                "label": "Mid Level",
+                "count": mid,
+                "percentage": round(
+                    (mid / total_experience_users) * 100
+                ),
+            },
+ 
+            {
+                "label": "Senior Level",
+                "count": senior,
+                "percentage": round(
+                    (senior / total_experience_users) * 100
+                ),
+            },
+        ]
+ 
+        # TOTAL OVERVIEW
+       
+ 
+        application_counts = JobApplication.objects.aggregate(
+ 
+            applicants=Count(
+                'id',
+                filter=Q(
+                    status=JobApplication.Status.APPLIED
+                )
+            ),
+ 
+            recommended=Count(
+                'id',
+                filter=Q(
+                    status=JobApplication.Status.RECRUITER_REVIEW
+                )
+            ),
+ 
+            shortlisted=Count(
+                'id',
+                filter=Q(
+                    status=JobApplication.Status.SHORTLISTED
+                )
+            ),
+ 
+            interview=Count(
+                'id',
+                filter=Q(
+                    status=JobApplication.Status.INTERVIEW_CALLED
+                )
+            ),
+ 
+            rejected=Count(
+                'id',
+                filter=Q(
+                    status=JobApplication.Status.REJECTED
+                )
+            ),
+ 
+            hired=Count(
+                'id',
+                filter=Q(
+                    status=JobApplication.Status.HIRED
+                )
+            ),
+        )
+ 
+        total_candidates = sum(
+            application_counts.values()
+        )
+ 
+        total_overview = {
+ 
+            "total_candidates": total_candidates,
+ 
+            "recommended":
+                application_counts["recommended"],
+ 
+            "shortlisted":
+                application_counts["shortlisted"],
+ 
+            "applicants":
+                application_counts["applicants"],
+ 
+            "interview":
+                application_counts["interview"],
+ 
+            "rejected":
+                application_counts["rejected"],
+ 
+            "hired":
+                application_counts["hired"],
+        }
+ 
+ 
+        payload = {
+ 
+            "overview_stats": overview_stats,
+ 
+            "job_postings_chart": job_postings_chart,
+ 
+            "highlighted_jobs": highlighted_jobs,
+ 
+            "admin_stats": admin_stats,
+ 
+            "user_growth_chart": user_growth_chart,
+ 
+            "activities_chart": activities_chart,
+ 
+            "experience_levels": experience_levels,
+ 
+            "total_overview": total_overview,
+        }
+ 
+        return Response(
+            payload,
+            status=status.HTTP_200_OK
+        )
+ 
