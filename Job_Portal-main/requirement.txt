@@ -73,3 +73,5 @@ google-auth-oauthlib==1.2.0
 reportlab==4.1.0
 razorpay==1.4.1 i  
 geoip2
+firebase-admin
+celery redis django-celery-beat django-celery-results

@@ -3,7 +3,8 @@ from django.dispatch import receiver
 from django.core.mail import send_mail
 from django.conf import settings
 from .models import Notification, Message
-
+from .services import NotificationService
+'''
 # Signal for sending email when notification is created
 @receiver(post_save, sender=Notification)
 def send_email_when_notification_created(sender, instance, created, **kwargs):
@@ -19,6 +20,9 @@ def send_email_when_notification_created(sender, instance, created, **kwargs):
                 fail_silently=True,
             )
 
+'''
+
+
 
 # Signal for creating notification when a new message is sent
 @receiver(post_save, sender=Message)
@@ -28,10 +32,20 @@ def create_message_notification(sender, instance, created, **kwargs):
     """
     if created and instance.sender != instance.receiver:
         # Create notification for the message receiver
-        Notification.objects.create(
+        '''Notification.objects.create(
             user=instance.receiver,
             message=f"New message from {instance.sender.username}",
             notification_type='message',
             related_object_id=instance.conversation.id,
             is_read=False
-        )
+        )'''
+        NotificationService.create_notification(
+                recipient=instance.receiver,
+                title="New Message",
+                message=(
+                    f"New message from "
+                    f"{instance.sender.username}"
+                ),
+                notification_type='message',
+                related_object_id=instance.conversation.id
+            )

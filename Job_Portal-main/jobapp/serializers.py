@@ -10,9 +10,9 @@ from .models import (
     NewsletterSubscriber, Notification, Conversation, Message, ContactMessage, 
     CompanyVerification, Complaint, CompanyProfile, UserSettings, 
     HelpTopic, RaiseTicket, PasswordResetToken, EmailOTP, ChatMessage, Plan, Subscription,
-    Invoice, PaymentMethod,AdminAccessLog, AdminTrustedDevice
+    Invoice, PaymentMethod,AdminAccessLog, AdminTrustedDevice, CompanyReview, UserDevice,
 )
-from .services import Admin2FAService 
+from .services import Admin2FAService , AdminSecurityService
  
 User = get_user_model()
 
@@ -300,9 +300,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             }
         }
  
- 
- 
- 
 # User Serializers
  
 class UserReadSerializer(serializers.ModelSerializer):
@@ -413,7 +410,7 @@ class EducationEntrySerializer(serializers.ModelSerializer):
  
         return data
  
- 
+
 class WorkExperienceEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = WorkExperienceEntry
@@ -546,9 +543,77 @@ class JobSeekerProfileReadSerializer(serializers.ModelSerializer):
         hsc_entry = educations.filter(qualification_level='HSC').first()
         if hsc_entry and hsc_entry.post_10th_study == 'Diploma':
             return 'Diploma'
-        
         return None
- 
+    def to_representation(self, instance):
+
+        data = super().to_representation(instance)
+
+        request = self.context.get("request")
+
+
+        if (
+            request
+            and
+            request.user == instance.user
+        ):
+
+            return data
+
+    
+
+        platform = (
+            JobseekerPlatformSettings.get_settings()
+        )
+
+      
+
+        if (
+            platform.resume_visibility
+            ==
+            "Private"
+        ):
+
+            data.pop("resume", None)
+
+        elif (
+            platform.resume_visibility
+            ==
+            "Employers Only"
+        ):
+
+            if (
+
+                not request.user.is_authenticated
+
+                or
+
+                request.user.user_type
+                !=
+                "employer"
+            ):
+
+                data.pop("resume", None)
+
+       
+
+        if platform.anonymous_profile:
+
+            data.pop("full_name", None)
+
+            data.pop("email", None)
+
+            data.pop("phone", None)
+
+            data.pop("profile_picture", None)
+
+            data.pop("linkedin_url", None)
+
+            data.pop("portfolio_url", None)
+
+            data.pop("location", None)
+
+        return data
+    
  
 class JobSeekerProfileWriteSerializer(WritableNestedModelSerializer):
     
@@ -714,11 +779,46 @@ class AdminProfileWriteSerializer(serializers.ModelSerializer):
         exclude = ['id', 'user', 'created_at', 'updated_at']
  
  
-# REMOVED: CompanySerializer - Using CompanyProfileSerializer instead
 
+class CompanyReviewSerializer(serializers.ModelSerializer):
+
+    reviewer_name = serializers.SerializerMethodField()
+
+    class Meta:
+
+        model = CompanyReview
+
+        fields = [
+            'id',
+            'reviewer_name',
+            'rating',
+            'review',
+            'is_anonymous',
+            'created_at'
+        ]
+
+        read_only_fields = [
+            'created_at'
+        ]
+
+    def get_reviewer_name(self, obj):
+
+        if obj.is_anonymous:
+
+            return "Anonymous"
+
+        return obj.reviewer.username
+    
+# REMOVED: CompanySerializer - Using CompanyProfileSerializer instead    
+'''
 class CompanyProfileSerializer(serializers.ModelSerializer):
     logo_url = serializers.SerializerMethodField(read_only=True)
     logo_absolute_url = serializers.SerializerMethodField(read_only=True)
+    reviews = CompanyReviewSerializer(
+        many=True,
+        read_only=True
+    )
+
  
     class Meta:
         model = CompanyProfile
@@ -740,7 +840,13 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             'created_at',
             'created_by'
         ]
-        read_only_fields = ['created_at', 'created_by']  # ✅ created_by is read-only
+        read_only_fields = [
+            'created_at',
+            'created_by',
+            'average_rating',
+            'total_reviews',
+            'reviews'
+        ]
  
     def get_logo_url(self, obj):
         return obj.company_logo.url if obj.company_logo else None
@@ -749,7 +855,311 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
         if obj.company_logo and request:
             return request.build_absolute_uri(obj.company_logo.url)
         return None
-    
+    def validate(self, attrs):
+
+            request = self.context.get("request")
+
+            user = request.user
+
+            platform = EmployerPlatformSettings.get_settings()
+
+            if not platform.allow_multiple_company:
+
+                employer_profile = getattr(
+                    user,
+                    "employer_profile",
+                    None
+                )
+
+                existing_company = getattr(
+                    employer_profile,
+                    "company",
+                    None
+                )
+
+                current_instance = getattr(
+                    self,
+                    "instance",
+                    None
+                )
+
+                # Block creating another company
+                if existing_company and not current_instance:
+
+                    raise serializers.ValidationError(
+                        {
+                            "company": (
+                                "Multiple companies are not allowed."
+                            )
+                        }
+                    )
+
+            return attrs
+            
+'''
+class CompanyProfileSerializer(serializers.ModelSerializer):
+
+    logo_url = serializers.SerializerMethodField(
+        read_only=True
+    )
+
+    logo_absolute_url = serializers.SerializerMethodField(
+        read_only=True
+    )
+
+    reviews = CompanyReviewSerializer(
+        many=True,
+        read_only=True
+    )
+
+    class Meta:
+
+        model = CompanyProfile
+
+        fields = [
+
+            'id',
+
+            'company_name',
+
+            'company_moto',
+
+            'contact_person',
+
+            'contact_number',
+
+            'company_email',
+
+            'website',
+
+            'company_size',
+
+            'address1',
+
+            'address2',
+
+            'about',
+
+            'company_logo',
+
+            'logo_url',
+
+            'logo_absolute_url',
+
+            # Branding
+
+            'banner_image',
+
+            'brand_color',
+
+            'linkedin_url',
+
+            'facebook_url',
+
+            'twitter_url',
+
+            # Reviews
+
+            'average_rating',
+
+            'total_reviews',
+
+            'reviews',
+
+            'created_at',
+
+            'created_by'
+        ]
+
+        read_only_fields = [
+
+            'created_at',
+
+            'created_by',
+
+            'average_rating',
+
+            'total_reviews',
+
+            'reviews'
+        ]
+
+    # ─────────────────────────────────────────
+    # LOGO URL
+    # ─────────────────────────────────────────
+
+    def get_logo_url(self, obj):
+
+        return (
+
+            obj.company_logo.url
+
+            if obj.company_logo
+
+            else None
+        )
+
+    # ─────────────────────────────────────────
+    # ABSOLUTE LOGO URL
+    # ─────────────────────────────────────────
+
+    def get_logo_absolute_url(self, obj):
+
+        request = self.context.get('request')
+
+        if obj.company_logo and request:
+
+            return request.build_absolute_uri(
+                obj.company_logo.url
+            )
+
+        return None
+
+    # ─────────────────────────────────────────
+    # MULTIPLE COMPANY VALIDATION
+    # ─────────────────────────────────────────
+
+    def validate(self, attrs):
+
+        request = self.context.get("request")
+
+        user = request.user
+
+        # ─────────────────────────────────────
+        # ACTIVE SUBSCRIPTION
+        # ─────────────────────────────────────
+
+        subscription = Subscription.objects.filter(
+            user=user,
+            status='active'
+        ).select_related(
+            'plan'
+        ).first()
+
+        if not subscription:
+
+            raise serializers.ValidationError(
+                {
+                    "subscription": (
+                        "No active subscription found."
+                    )
+                }
+            )
+
+        # ─────────────────────────────────────
+        # PLAN SETTINGS
+        # ─────────────────────────────────────
+
+        platform = (
+            EmployerPlatformSettings.objects.filter(
+                plan=subscription.plan
+            ).first()
+        )
+
+        if not platform:
+
+            raise serializers.ValidationError(
+                {
+                    "settings": (
+                        "Employer platform settings "
+                        "not configured for this plan."
+                    )
+                }
+            )
+
+        # ─────────────────────────────────────
+        # MULTIPLE COMPANY RESTRICTION
+        # ─────────────────────────────────────
+
+        if not platform.allow_multiple_company:
+
+            employer_profile = getattr(
+                user,
+                "employer_profile",
+                None
+            )
+
+            existing_company = getattr(
+                employer_profile,
+                "company",
+                None
+            )
+
+            current_instance = getattr(
+                self,
+                "instance",
+                None
+            )
+
+            if (
+                existing_company
+                and
+                not current_instance
+            ):
+
+                raise serializers.ValidationError(
+                    {
+                        "company": (
+                            "Multiple companies "
+                            "are not allowed."
+                        )
+                    }
+                )
+
+        return attrs
+
+    # ─────────────────────────────────────────
+    # RESPONSE CONTROL
+    # ─────────────────────────────────────────
+
+    def to_representation(self, instance):
+
+        data = super().to_representation(instance)
+
+        # ─────────────────────────────────────
+        # PLAN SETTINGS
+        # ─────────────────────────────────────
+
+        platform = self.context.get("platform")
+
+        # ─────────────────────────────────────
+        # REVIEW VISIBILITY
+        # ─────────────────────────────────────
+
+        if (
+            not platform
+            or
+            not platform.show_company_reviews
+        ):
+
+            data.pop("average_rating", None)
+
+            data.pop("total_reviews", None)
+
+            data.pop("reviews", None)
+
+        # ─────────────────────────────────────
+        # BRANDING VISIBILITY
+        # ─────────────────────────────────────
+
+        if (
+            not platform
+            or
+            not platform.enable_company_branding
+        ):
+
+            data.pop("banner_image", None)
+
+            data.pop("brand_color", None)
+
+            data.pop("linkedin_url", None)
+
+            data.pop("facebook_url", None)
+
+            data.pop("twitter_url", None)
+
+        return data
+
 
 # EmployerProfile Serializers
 class EmployerProfileReadSerializer(serializers.ModelSerializer):
@@ -761,7 +1171,7 @@ class EmployerProfileReadSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'full_name', 'employee_id', 'company', 'created_at', 'updated_at']
  
  
-class EmployerProfileWriteSerializer(serializers.ModelSerializer):
+'''class EmployerProfileWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployerProfile
         fields = ['full_name', 'employee_id', 'company']
@@ -785,11 +1195,141 @@ class EmployerProfileWriteSerializer(serializers.ModelSerializer):
         if value:
             # You can add custom validation here if needed
             pass
+        return value  '''
+
+
+
+class EmployerProfileWriteSerializer(serializers.ModelSerializer):
+
+    class Meta:
+
+        model = EmployerProfile
+
+        fields = [
+            'full_name',
+            'employee_id',
+            'company'
+        ]
+
+    # ─────────────────────────────────────────
+    # EMPLOYEE ID VALIDATION
+    # ─────────────────────────────────────────
+
+    def validate_employee_id(self, value):
+
+        if not value:
+
+            return None
+
+        qs = EmployerProfile.objects.filter(
+            employee_id=value
+        )
+
+        if self.instance:
+
+            qs = qs.exclude(
+                id=self.instance.id
+            )
+
+        if qs.exists():
+
+            raise serializers.ValidationError(
+                "This Employee ID is already in use."
+            )
+
         return value
- 
+
+    # ─────────────────────────────────────────
+    # MULTIPLE USER RESTRICTION
+    # ─────────────────────────────────────────
+
+    def validate(self, attrs):
+
+        request = self.context.get("request")
+
+        user = request.user
+
+        company = attrs.get("company")
+
+        # ─────────────────────────────────────
+        # ACTIVE SUBSCRIPTION
+        # ─────────────────────────────────────
+
+        subscription = Subscription.objects.filter(
+            user=user,
+            status='active'
+        ).select_related(
+            'plan'
+        ).first()
+
+        if not subscription:
+
+            raise serializers.ValidationError(
+                {
+                    "subscription": (
+                        "No active subscription found."
+                    )
+                }
+            )
+
+        # ─────────────────────────────────────
+        # PLAN SETTINGS
+        # ─────────────────────────────────────
+
+        platform = (
+            EmployerPlatformSettings.objects.filter(
+                plan=subscription.plan
+            ).first()
+        )
+
+        if not platform:
+
+            raise serializers.ValidationError(
+                {
+                    "settings": (
+                        "Employer platform settings "
+                        "not configured for this plan."
+                    )
+                }
+            )
+
+        # ─────────────────────────────────────
+        # MULTIPLE USER VALIDATION
+        # ─────────────────────────────────────
+
+        if (
+            company
+            and
+            not platform.allow_multiple_users
+        ):
+
+            qs = EmployerProfile.objects.filter(
+                company=company
+            )
+
+            # Exclude current profile during update
+
+            if self.instance:
+
+                qs = qs.exclude(
+                    id=self.instance.id
+                )
+
+            if qs.exists():
+
+                raise serializers.ValidationError(
+                    {
+                        "company": (
+                            "Multiple users are not "
+                            "allowed for this company."
+                        )
+                    }
+                )
+
+        return attrs
  
 # PostAJob Serializer
-
+'''
 class PostAJobSerializer(serializers.ModelSerializer):
 
     company = serializers.SerializerMethodField()
@@ -1018,7 +1558,466 @@ class PostAJobSerializer(serializers.ModelSerializer):
 
         return instance
 
+'''
 
+class PostAJobSerializer(serializers.ModelSerializer):
+
+    company = serializers.SerializerMethodField()
+
+    posted_date = serializers.DateTimeField(
+        source='created_at',
+        read_only=True
+    )
+
+    class Meta:
+
+        model = PostAJob
+
+        fields = [
+
+            'id',
+
+            'job_title',
+
+            'industry_type',
+
+            'department',
+
+            'work_type',
+
+            'shift',
+
+            'work_duration',
+
+            'salary',
+
+            'experience',
+
+            'location',
+
+            'openings',
+
+            'job_category',
+
+            'education',
+
+            'key_skills',
+
+            'job_highlights',
+
+            'job_description',
+
+            'responsibilities',
+
+            'job_status',
+
+            'is_published',
+
+            'posted_date',
+
+            'employer',
+
+            'company',
+
+            'is_highlighted',
+
+            'highlighted_at',
+        ]
+
+        read_only_fields = [
+
+            'id',
+
+            'is_published',
+
+            'posted_date',
+
+            'employer',
+
+            'highlighted_at',
+        ]
+
+   
+
+    def get_company(self, obj):
+
+        if (
+            obj.employer
+            and
+            hasattr(
+                obj.employer,
+                'employer_profile'
+            )
+        ):
+
+            if obj.employer.employer_profile.company:
+
+                return CompanyProfileSerializer(
+
+                    obj.employer.employer_profile.company,
+
+                    context=self.context
+
+                ).data
+
+        return None
+
+
+
+    def validate(self, data):
+
+        is_partial = self.context.get(
+            'partial',
+            False
+        )
+
+   
+
+        if not is_partial:
+
+            required_fields = [
+
+                'job_title',
+
+                'work_type',
+
+                'shift',
+
+                'work_duration',
+
+                'salary',
+
+                'experience',
+
+                'location',
+
+                'openings',
+
+                'job_description'
+            ]
+
+            for field in required_fields:
+
+                if not data.get(field):
+
+                    raise serializers.ValidationError(
+                        {
+                            field: (
+                                f"{field} is required."
+                            )
+                        }
+                    )
+
+        # ─────────────────────────────────────
+        # JOB STATUS VALIDATION
+        # ─────────────────────────────────────
+
+        if (
+            'job_status' in data
+            and
+            data['job_status']
+        ):
+
+            valid_statuses = [
+
+                'Hiring in Progress',
+
+                'Reviewing Application',
+
+                'Hiring Done'
+            ]
+
+            if (
+                data['job_status']
+                not in valid_statuses
+            ):
+
+                raise serializers.ValidationError(
+                    {
+                        'job_status': (
+                            f"Invalid status. "
+                            f"Choose from: "
+                            f"{', '.join(valid_statuses)}"
+                        )
+                    }
+                )
+
+        # ─────────────────────────────────────
+        # ARRAY FIELD VALIDATION
+        # ─────────────────────────────────────
+
+        array_fields = [
+
+            'industry_type',
+
+            'department',
+
+            'education',
+
+            'key_skills',
+
+            'job_highlights',
+
+            'responsibilities',
+
+            'location'
+        ]
+
+        for field in array_fields:
+
+            if (
+                field in data
+                and
+                data[field] is not None
+            ):
+
+                if not isinstance(
+                    data[field],
+                    list
+                ):
+
+                    raise serializers.ValidationError(
+                        {
+                            field: (
+                                f"{field} must be a list."
+                            )
+                        }
+                    )
+
+        # ─────────────────────────────────────
+        # FEATURED JOB VALIDATION
+        # ─────────────────────────────────────
+
+        request = self.context.get("request")
+
+        employer = request.user
+
+        is_highlighted = data.get(
+            "is_highlighted",
+            False
+        )
+
+        if is_highlighted:
+
+            # Active Subscription
+
+            subscription = Subscription.objects.filter(
+                user=employer,
+                status='active'
+            ).select_related(
+                'plan'
+            ).first()
+
+            if not subscription:
+
+                raise serializers.ValidationError(
+                    {
+                        "subscription": (
+                            "No active subscription found."
+                        )
+                    }
+                )
+
+            # Plan Settings
+
+            platform = (
+                EmployerPlatformSettings.objects.filter(
+                    plan=subscription.plan
+                ).first()
+            )
+
+            if not platform:
+
+                raise serializers.ValidationError(
+                    {
+                        "settings": (
+                            "Employer settings "
+                            "not configured."
+                        )
+                    }
+                )
+
+            # Featured Enabled
+
+            if not platform.featured_employer_option:
+
+                raise serializers.ValidationError(
+                    {
+                        "is_highlighted": (
+                            "Featured jobs are not "
+                            "allowed for your plan."
+                        )
+                    }
+                )
+
+            # Featured Limit
+
+            highlighted_count = (
+                PostAJob.objects.filter(
+                    employer=employer,
+                    is_highlighted=True
+                ).count()
+            )
+
+            # Exclude current instance
+
+            if (
+                self.instance
+                and
+                self.instance.is_highlighted
+            ):
+
+                highlighted_count -= 1
+
+            if (
+                highlighted_count
+                >=
+                platform.featured_job_limit
+            ):
+
+                raise serializers.ValidationError(
+                    {
+                        "is_highlighted": (
+                            "Featured job limit reached."
+                        )
+                    }
+                )
+
+        return data
+
+    # ─────────────────────────────────────────
+    # CREATE
+    # ─────────────────────────────────────────
+
+    def create(self, validated_data):
+
+        if 'job_status' not in validated_data:
+
+            validated_data['job_status'] = (
+                'Reviewing Application'
+            )
+
+        array_fields = [
+
+            'industry_type',
+
+            'department',
+
+            'education',
+
+            'key_skills',
+
+            'job_highlights',
+
+            'responsibilities',
+
+            'location'
+        ]
+
+        for field in array_fields:
+
+            if (
+                field in validated_data
+                and
+                validated_data[field]
+            ):
+
+                validated_data[field] = [
+
+                    item
+
+                    for item in validated_data[field]
+
+                    if item and str(item).strip()
+                ]
+
+        # Highlight timestamp
+
+        if validated_data.get("is_highlighted"):
+
+            validated_data["highlighted_at"] = (
+                timezone.now()
+            )
+
+        return super().create(validated_data)
+
+    # ─────────────────────────────────────────
+    # UPDATE
+    # ─────────────────────────────────────────
+
+    def update(self, instance, validated_data):
+
+        for attr, value in validated_data.items():
+
+            if value is not None:
+
+                setattr(instance, attr, value)
+
+        # Highlight timestamp
+
+        if validated_data.get("is_highlighted"):
+
+            instance.highlighted_at = (
+                timezone.now()
+            )
+
+        instance.save()
+
+        return instance
+
+    # ─────────────────────────────────────────
+    # RESPONSE CONTROL
+    # ─────────────────────────────────────────
+
+    def to_representation(self, instance):
+
+        data = super().to_representation(instance)
+
+        employer = instance.employer
+
+        platform = None
+
+        # ─────────────────────────────────────
+        # ACTIVE SUBSCRIPTION
+        # ─────────────────────────────────────
+
+        subscription = Subscription.objects.filter(
+            user=employer,
+            status='active'
+        ).select_related(
+            'plan'
+        ).first()
+
+        # ─────────────────────────────────────
+        # PLAN SETTINGS
+        # ─────────────────────────────────────
+
+        if subscription:
+
+            platform = (
+                EmployerPlatformSettings.objects.filter(
+                    plan=subscription.plan
+                ).first()
+            )
+
+        # ─────────────────────────────────────
+        # HIDE FEATURED EMPLOYER
+        # ─────────────────────────────────────
+
+        if (
+            not platform
+            or
+            not platform.featured_employer_option
+        ):
+
+            data.pop("is_highlighted", None)
+
+            data.pop("highlighted_at", None)
+
+
+        return data   
+
+    
 # Job Read Serializer (for PostAJob)
 
 class JobReadSerializer(serializers.ModelSerializer):
@@ -1056,6 +2055,29 @@ class JobReadSerializer(serializers.ModelSerializer):
     def get_applicants_count(self, obj):
 
         return JobApplication.objects.filter(job=obj).count()
+    
+    def to_representation(self, instance):
+
+        data = super().to_representation(
+            instance
+        )
+
+        platform = (
+            JobseekerPlatformSettings.get_settings()
+        )
+
+
+        if not platform.salary_visibility:
+
+            data.pop("salary", None)
+
+            data.pop("min_salary", None)
+
+            data.pop("max_salary", None)
+
+            data.pop("salary_range", None)
+
+        return data
 
 
 # Job Write Serializer
@@ -1240,60 +2262,281 @@ class JobUpdateSerializer(serializers.ModelSerializer):
  
  
 # JobApplication & SavedJob
-class JobApplicationWriteSerializer(serializers.ModelSerializer):
-    resume = serializers.FileField(required=False)
-    job = serializers.PrimaryKeyRelatedField(
-        queryset=PostAJob.objects.filter(is_published=True)
+from datetime import timedelta
+
+from django.utils import timezone
+
+from rest_framework import serializers
+
+from .models import (
+
+    JobApplication,
+
+    PostAJob,
+
+    JobseekerPlatformSettings
+)
+
+
+class JobApplicationWriteSerializer(
+    serializers.ModelSerializer
+):
+
+    resume = serializers.FileField(
+        required=False
     )
- 
+
+    job = serializers.PrimaryKeyRelatedField(
+
+        queryset=PostAJob.objects.filter(
+            is_published=True
+        )
+    )
+
     class Meta:
+
         model = JobApplication
-        fields = ['job', 'cover_letter', 'resume']
-        read_only_fields = ['id', 'applied_date', 'user', 'status', 'resume_version']
- 
+
+        fields = [
+
+            'job',
+
+            'cover_letter',
+
+            'resume'
+        ]
+
+        read_only_fields = [
+
+            'id',
+
+            'applied_date',
+
+            'expires_at',
+
+            'user',
+
+            'status',
+
+            'resume_version'
+        ]
+
     def validate(self, data):
-        if not hasattr(self.context['request'].user, 'jobseeker_profile'):
-            raise serializers.ValidationError("Only jobseekers can apply.")
+
+        request = self.context['request']
+
+        user = request.user
+
+      
+
+        if not hasattr(
+            user,
+            'jobseeker_profile'
+        ):
+
+            raise serializers.ValidationError(
+                "Only jobseekers can apply."
+            )
+
+        profile = user.jobseeker_profile
+
+
+
+        platform = (
+            JobseekerPlatformSettings.get_settings()
+        )
+
+        resume = data.get("resume")
+
  
-        user = self.context['request'].user
+
+        if not platform.easy_apply:
+
+            if not resume:
+
+                raise serializers.ValidationError(
+                    {
+                        "resume": (
+                            "Resume upload "
+                            "is required."
+                        )
+                    }
+                )
+
+
+
+        else:
+
+            if (
+                not resume
+                and
+                not profile.resume_file
+            ):
+
+                raise serializers.ValidationError(
+                    {
+                        "resume": (
+                            "Upload resume or "
+                            "add resume in profile."
+                        )
+                    }
+                )
+
+  
+
+        required_percent = int(
+
+            platform.profile_completion_required
+
+            .replace("%", "")
+
+            .strip()
+        )
+
+        if (
+            profile.profile_completion
+            <
+            required_percent
+        ):
+
+            raise serializers.ValidationError(
+                {
+                    "error": (
+                        f"Minimum profile completion "
+                        f"required is "
+                        f"{required_percent}%."
+                    )
+                }
+            )
+
+
+
+        today_count = (
+            JobApplication.objects.filter(
+                user=user,
+                applied_date__date=timezone.now().date()
+            ).count()
+        )
+
+        if (
+            today_count
+            >=
+            platform.max_applications
+        ):
+
+            raise serializers.ValidationError(
+                {
+                    "error": (
+                        "Daily application "
+                        "limit reached."
+                    )
+                }
+            )
+
+
+
         job = data.get('job')
- 
+
         active_statuses = [
+
             JobApplication.Status.APPLIED,
+
             JobApplication.Status.RESUME_SCREENING,
+
             JobApplication.Status.RECRUITER_REVIEW,
+
             JobApplication.Status.SHORTLISTED,
+
             JobApplication.Status.INTERVIEW_CALLED,
+
             JobApplication.Status.OFFERED,
+
             JobApplication.Status.HIRED
         ]
- 
+
+   
+
         if JobApplication.objects.filter(
+
             user=user,
+
             job=job,
-            status__in=active_statuses
+
+            status__in=active_statuses,
+
+            expires_at__gt=timezone.now()
+
         ).exists():
+
             raise serializers.ValidationError(
-                "You already have an active application for this job."
+
+                "You already have an active "
+
+                "application for this job."
             )
- 
+
         return data
- 
+
     def create(self, validated_data):
+
         user = self.context['request'].user
-        resume = validated_data.pop('resume', None)
- 
+
+        profile = user.jobseeker_profile
+
+        platform = (
+            JobseekerPlatformSettings.get_settings()
+        )
+
+        resume = validated_data.pop(
+            'resume',
+            None
+        )
+
         validated_data['user'] = user
-        validated_data['status'] = JobApplication.Status.APPLIED
- 
-        if resume:
-            validated_data['resume_version'] = resume
+
+        validated_data['status'] = (
+            JobApplication.Status.APPLIED
+        )
+
+     
+
+        validated_data['expires_at'] = (
+
+            timezone.now()
+
+            +
+
+            timedelta(
+                days=platform.application_expiry_days
+            )
+        )
+
+       
+
+        if platform.easy_apply:
+
+            if resume:
+
+                validated_data[
+                    'resume_version'
+                ] = resume
+
+            elif profile.resume_file:
+
+                validated_data[
+                    'resume_version'
+                ] = profile.resume_file
+
+
         else:
-            profile = user.jobseeker_profile
-            if profile.resume_file:
-                validated_data['resume_version'] = profile.resume_file
- 
-        return super().create(validated_data)
+
+            validated_data[
+                'resume_version'
+            ] = resume
+
+        return super().create(
+            validated_data
+        )
  
  
 class JobApplicationDetailSerializer(serializers.ModelSerializer):
@@ -1307,6 +2550,26 @@ class JobApplicationDetailSerializer(serializers.ModelSerializer):
             'cover_letter', 'resume_version'
         ]
         read_only_fields = ['id', 'applied_date', 'user', 'status']
+
+    def to_representation(self, instance):
+
+        data = super().to_representation(
+            instance
+        )
+
+        platform = (
+            JobseekerPlatformSettings.get_settings()
+        )
+
+       
+
+        if (
+            not platform.application_status_tracking
+        ):
+
+            data.pop("status", None)
+
+        return data
  
  
 class SavedJobSerializer(serializers.ModelSerializer):
@@ -1330,6 +2593,25 @@ class JobApplicationListSerializer(serializers.ModelSerializer):
         model = JobApplication
         fields = ['id', 'job', 'applied_date', 'status', 'cover_letter']
         read_only_fields = ['id', 'applied_date', 'status']
+
+    def to_representation(self, instance):
+
+        data = super().to_representation(
+            instance
+        )
+
+        platform = (
+            JobseekerPlatformSettings.get_settings()
+        )
+
+
+        if (
+            not platform.application_status_tracking
+        ):
+
+            data.pop("status", None)
+
+        return data
  
  
 class JobApplicationEmployerSerializer(serializers.ModelSerializer):
@@ -1355,8 +2637,23 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'user', 'message', 'created_at', 'is_read', 'notification_type', 'related_object_id']
         read_only_fields = ['id', 'created_at']
+
+
+class SaveDeviceTokenSerializer(serializers.Serializer): #changed on 15/05
+    fcm_token = serializers.CharField()
+    platform = serializers.ChoiceField(
+        required=False,
+        choices=UserDevice.PLATFORM_CHOICES,
+        default="web"
+    )
+
+    def validate_fcm_token(self, value):
+        token = (value or "").strip()
+        if not token:
+            raise serializers.ValidationError("fcm_token is required")
+        return token
  
- 
+
 class UserSettingsSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="user.email", read_only=True)
  
@@ -1556,7 +2853,7 @@ class ContactMessageSerializer(serializers.ModelSerializer):
         model = ContactMessage
         fields = '__all__'    
  
- 
+'''
 # CompanyVerify Serializer
 class CompanyVerificationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -1568,6 +2865,7 @@ class CompanyVerificationSerializer(serializers.ModelSerializer):
         registration_number = data.get("registration_number")
         tax_id = data.get("tax_id")
         legal_name = data.get("legal_name")
+        platform = EmployerPlatformSettings.get_settings()
         
         # Safely get employer from context
         employer = None
@@ -1594,15 +2892,325 @@ class CompanyVerificationSerializer(serializers.ModelSerializer):
         
         # Allow verification submission even if company exists
         # The save() method will handle linking to existing company
+
+
+        errors = {}
+
+        # Company Certificate
         
+
+        if platform.req_company_cert:
+
+            incorporation_certificate = data.get(
+                "incorporation_certificate"
+            )
+
+            if not incorporation_certificate:
+
+                errors["incorporation_certificate"] = (
+                    "Company certificate is required."
+                )
+
+        # GST Certificate
+
+        if platform.req_gst_cert:
+
+            gst_certificate = data.get("gst_certificate")
+
+            if not gst_certificate:
+
+                errors["gst_certificate"] = (
+                    "GST certificate is required."
+                )
+
+     
+        # Business Email
+    
+
+        if platform.req_business_email:
+
+            official_email = data.get("official_email")
+
+            if not official_email:
+
+                errors["official_email"] = (
+                    "Official business email is required."
+                )
+
+        # Company Website
+
+
+        if platform.req_company_website:
+
+            website_url = data.get("website_url")
+
+            if not website_url:
+
+                errors["website_url"] = (
+                    "Company website is required."
+                )
+       
+        # Multiple Company Restriction
+        
+
+        if not platform.allow_multiple_company:
+
+            employer_profile = getattr(
+                employer,
+                "employer_profile",
+                None
+            )
+
+            if employer_profile and employer_profile.company:
+
+                raise serializers.ValidationError(
+                    {
+                        "company": (
+                            "Multiple companies are not allowed."
+                        )
+                    }
+                )
+
+        # FINAL VALIDATION
+
+
+        if errors:
+
+            raise serializers.ValidationError(errors)
+        
+
         return data
  
- 
+ '''
+
+
+# CompanyVerify Serializer
+class CompanyVerificationSerializer(serializers.ModelSerializer):
+
+    class Meta:
+
+        model = CompanyVerification
+
+        fields = "__all__"
+
+        read_only_fields = [
+            'status',
+            'employer',
+            'created_at'
+        ]
+
+    def validate(self, data):
+
+        registration_number = data.get(
+            "registration_number"
+        )
+
+        tax_id = data.get("tax_id")
+
+        legal_name = data.get("legal_name")
+
+        # ─────────────────────────────────────
+        # EMPLOYER
+        # ─────────────────────────────────────
+
+        employer = None
+
+        if (
+            hasattr(self, 'context')
+            and
+            'request' in self.context
+        ):
+
+            employer = self.context[
+                'request'
+            ].user
+
+        # ─────────────────────────────────────
+        # ACTIVE SUBSCRIPTION
+        # ─────────────────────────────────────
+
+        subscription = Subscription.objects.filter(
+            user=employer,
+            status='active'
+        ).select_related(
+            'plan'
+        ).first()
+
+        if not subscription:
+
+            raise serializers.ValidationError(
+                {
+                    "subscription": (
+                        "No active subscription found."
+                    )
+                }
+            )
+
+        # ─────────────────────────────────────
+        # PLAN SETTINGS
+        # ─────────────────────────────────────
+
+        platform = (
+            EmployerPlatformSettings.objects.filter(
+                plan=subscription.plan
+            ).first()
+        )
+
+        if not platform:
+
+            raise serializers.ValidationError(
+                {
+                    "settings": (
+                        "Employer platform settings "
+                        "not configured for this plan."
+                    )
+                }
+            )
+
+        # ─────────────────────────────────────
+        # EXISTING VERIFICATION
+        # ─────────────────────────────────────
+
+        if (
+            employer
+            and
+            CompanyVerification.objects.filter(
+                employer=employer
+            ).exists()
+        ):
+
+            raise serializers.ValidationError(
+                (
+                    "You have already submitted "
+                    "a verification request."
+                )
+            )
+
+        # ─────────────────────────────────────
+        # EXISTING APPROVED COMPANY
+        # ─────────────────────────────────────
+
+        existing_reg = (
+            CompanyVerification.objects.filter(
+                registration_number=registration_number,
+                status='approved'
+            ).exists()
+        )
+
+        existing_tax = (
+            CompanyVerification.objects.filter(
+                tax_id=tax_id,
+                status='approved'
+            ).exists()
+        )
+
+        # ─────────────────────────────────────
+        # VALIDATION ERRORS
+        # ─────────────────────────────────────
+
+        errors = {}
+
+        # Company Certificate
+
+        if platform.req_company_cert:
+
+            incorporation_certificate = data.get(
+                "incorporation_certificate"
+            )
+
+            if not incorporation_certificate:
+
+                errors[
+                    "incorporation_certificate"
+                ] = (
+                    "Company certificate is required."
+                )
+
+        # GST Certificate
+
+        if platform.req_gst_cert:
+
+            gst_certificate = data.get(
+                "gst_certificate"
+            )
+
+            if not gst_certificate:
+
+                errors["gst_certificate"] = (
+                    "GST certificate is required."
+                )
+
+        # Business Email
+
+        if platform.req_business_email:
+
+            official_email = data.get(
+                "official_email"
+            )
+
+            if not official_email:
+
+                errors["official_email"] = (
+                    "Official business email "
+                    "is required."
+                )
+
+        # Company Website
+
+        if platform.req_company_website:
+
+            website_url = data.get(
+                "website_url"
+            )
+
+            if not website_url:
+
+                errors["website_url"] = (
+                    "Company website is required."
+                )
+
+        # ─────────────────────────────────────
+        # MULTIPLE COMPANY RESTRICTION
+        # ─────────────────────────────────────
+
+        if not platform.allow_multiple_company:
+
+            employer_profile = getattr(
+                employer,
+                "employer_profile",
+                None
+            )
+
+            if (
+                employer_profile
+                and
+                employer_profile.company
+            ):
+
+                raise serializers.ValidationError(
+                    {
+                        "company": (
+                            "Multiple companies "
+                            "are not allowed."
+                        )
+                    }
+                )
+
+        # ─────────────────────────────────────
+        # FINAL VALIDATION
+        # ─────────────────────────────────────
+
+        if errors:
+
+            raise serializers.ValidationError(
+                errors
+            )
+
+        return data
 # OTP Serializer
 class VerifyEmailOTPSerializer(serializers.Serializer):
     email = serializers.EmailField()
     otp = serializers.CharField(max_length=6)
- 
  
 # REMOVED: Duplicate CompanyProfileSerializer (now defined above)
  
@@ -1993,4 +3601,414 @@ class AdminAccessLogSerializer(serializers.ModelSerializer):
             "user_agent",
             "extra_data",
         ]
- 
+
+# for employer setting
+
+from rest_framework import serializers
+from .models import EmployerPlatformSettings
+class EmployerPlatformSettingsSerializer(serializers.ModelSerializer):
+
+    # ─────────────────────────────────────────
+    # PLAN
+    # ─────────────────────────────────────────
+
+    plan = serializers.CharField(
+        source='plan.name',
+        read_only=True
+    )
+
+    # ─────────────────────────────────────────
+    # REQUIRED DOCUMENTS
+    # ─────────────────────────────────────────
+
+    requiredDocs = serializers.SerializerMethodField()
+
+    # ─────────────────────────────────────────
+    # PREFERENCES
+    # ─────────────────────────────────────────
+
+    preferences = serializers.SerializerMethodField()
+
+    # ─────────────────────────────────────────
+    # NOTIFICATIONS
+    # ─────────────────────────────────────────
+
+    notifications = serializers.SerializerMethodField()
+
+    class Meta:
+
+        model = EmployerPlatformSettings
+
+        fields = [
+
+            # Plan
+            'plan',
+
+            # Basic Settings
+            'employer_registration',
+            'email_verification',
+            'mobile_verification',
+            'approval_type',
+            'account_status',
+
+            # Job Settings
+            'job_expire_days',
+            'max_job_posts',
+            'featured_job_limit',
+            'allow_edit_after_approval',
+
+            # Nested Groups
+            'requiredDocs',
+            'preferences',
+            'notifications',
+        ]
+
+    # ─────────────────────────────────────────
+    # REQUIRED DOCS RESPONSE
+    # ─────────────────────────────────────────
+
+    def get_requiredDocs(self, obj):
+
+        return {
+
+            "companyCert": obj.req_company_cert,
+
+            "gstCert": obj.req_gst_cert,
+
+            "businessEmail": obj.req_business_email,
+
+            "companyWebsite": obj.req_company_website,
+        }
+
+    # ─────────────────────────────────────────
+    # PREFERENCES RESPONSE
+    # ─────────────────────────────────────────
+
+    def get_preferences(self, obj):
+
+        return {
+
+            "multipleCompany": obj.allow_multiple_company,
+
+            "multipleUsers": obj.allow_multiple_users,
+
+            "companyReviews": obj.show_company_reviews,
+
+            "companyBranding": obj.enable_company_branding,
+
+            "featuredEmployer": obj.featured_employer_option,
+        }
+
+    # ─────────────────────────────────────────
+    # NOTIFICATIONS RESPONSE
+    # ─────────────────────────────────────────
+
+    def get_notifications(self, obj):
+
+        return {
+
+            "email": obj.notif_email,
+
+            "newSignups": obj.notif_new_signups,
+
+            "alerts": obj.notif_alerts,
+
+            "announcements": obj.notif_announcements,
+
+            "weeklySummary": obj.notif_weekly_summary,
+        }
+
+    # ─────────────────────────────────────────
+    # UPDATE
+    # ─────────────────────────────────────────
+
+    def update(self, instance, validated_data):
+
+        request = self.context.get("request")
+
+        data = request.data
+
+        # ─────────────────────────────────────
+        # REQUIRED DOCUMENTS
+        # ─────────────────────────────────────
+
+        required_docs = data.get(
+            "requiredDocs",
+            {}
+        )
+
+        instance.req_company_cert = required_docs.get(
+            "companyCert",
+            instance.req_company_cert
+        )
+
+        instance.req_gst_cert = required_docs.get(
+            "gstCert",
+            instance.req_gst_cert
+        )
+
+        instance.req_business_email = required_docs.get(
+            "businessEmail",
+            instance.req_business_email
+        )
+
+        instance.req_company_website = required_docs.get(
+            "companyWebsite",
+            instance.req_company_website
+        )
+
+        # ─────────────────────────────────────
+        # PREFERENCES
+        # ─────────────────────────────────────
+
+        preferences = data.get(
+            "preferences",
+            {}
+        )
+
+        instance.allow_multiple_company = preferences.get(
+            "multipleCompany",
+            instance.allow_multiple_company
+        )
+
+        instance.allow_multiple_users = preferences.get(
+            "multipleUsers",
+            instance.allow_multiple_users
+        )
+
+        instance.show_company_reviews = preferences.get(
+            "companyReviews",
+            instance.show_company_reviews
+        )
+
+        instance.enable_company_branding = preferences.get(
+            "companyBranding",
+            instance.enable_company_branding
+        )
+
+        instance.featured_employer_option = preferences.get(
+            "featuredEmployer",
+            instance.featured_employer_option
+        )
+
+        # ─────────────────────────────────────
+        # NOTIFICATIONS
+        # ─────────────────────────────────────
+
+        notifications = data.get(
+            "notifications",
+            {}
+        )
+
+        instance.notif_email = notifications.get(
+            "email",
+            instance.notif_email
+        )
+
+        instance.notif_new_signups = notifications.get(
+            "newSignups",
+            instance.notif_new_signups
+        )
+
+        instance.notif_alerts = notifications.get(
+            "alerts",
+            instance.notif_alerts
+        )
+
+        instance.notif_announcements = notifications.get(
+            "announcements",
+            instance.notif_announcements
+        )
+
+        instance.notif_weekly_summary = notifications.get(
+            "weeklySummary",
+            instance.notif_weekly_summary
+        )
+
+        # ─────────────────────────────────────
+        # NORMAL FIELDS
+        # ─────────────────────────────────────
+
+        normal_fields = [
+
+            'employer_registration',
+
+            'email_verification',
+
+            'mobile_verification',
+
+            'approval_type',
+
+            'account_status',
+
+            'job_expire_days',
+
+            'max_job_posts',
+
+            'featured_job_limit',
+
+            'allow_edit_after_approval',
+        ]
+
+        for field in normal_fields:
+
+            if field in validated_data:
+
+                setattr(
+                    instance,
+                    field,
+                    validated_data[field]
+                )
+
+        instance.save()
+
+        return instance
+
+
+#for jobseekersetting
+from .models import JobseekerPlatformSettings
+
+
+class JobseekerPlatformSettingsSerializer(
+    serializers.ModelSerializer
+):
+
+    emailVer = serializers.BooleanField(
+        source="email_verification"
+    )
+
+    phoneVer = serializers.BooleanField(
+        source="phone_verification"
+    )
+
+    domainRest = serializers.BooleanField(
+        source="domain_restriction"
+    )
+
+    allowedDomains = serializers.ListField(
+        source="allowed_domains",
+        child=serializers.CharField(),
+        required=False
+    )
+
+    defaultRole = serializers.CharField(
+        source="default_role"
+    )
+
+    accountStatus = serializers.CharField(
+        source="account_status"
+    )
+
+    profileVisibility = serializers.CharField(
+        source="profile_visibility"
+    )
+
+    resumeVisibility = serializers.CharField(
+        source="resume_visibility"
+    )
+
+    anonymous = serializers.BooleanField(
+        source="anonymous_profile"
+    )
+
+    completionPercent = serializers.CharField(
+        source="profile_completion_required"
+    )
+
+    salary = serializers.BooleanField(
+        source="salary_visibility"
+    )
+
+    reviews = serializers.BooleanField(
+        source="company_reviews"
+    )
+
+    appStatus = serializers.BooleanField(
+        source="application_status_tracking"
+    )
+
+    similarJobs = serializers.BooleanField(
+        source="similar_jobs"
+    )
+
+    advice = serializers.BooleanField(
+        source="career_advice"
+    )
+
+    easyApply = serializers.BooleanField(
+        source="easy_apply"
+    )
+
+    saveJobs = serializers.BooleanField(
+        source="save_jobs"
+    )
+
+    maxApps = serializers.IntegerField(
+        source="max_applications"
+    )
+
+    appExpiry = serializers.IntegerField(
+        source="application_expiry_days"
+    )
+
+    class Meta:
+
+        model = JobseekerPlatformSettings
+
+        fields = [
+
+            "id",
+
+            "registration",
+
+            "emailVer",
+
+            "phoneVer",
+
+            "domainRest",
+
+            "allowedDomains",
+
+            "defaultRole",
+
+            "accountStatus",
+
+            "profileVisibility",
+
+            "resumeVisibility",
+
+            "anonymous",
+
+            "completionPercent",
+
+            "salary",
+
+            "reviews",
+
+            "appStatus",
+
+            "similarJobs",
+
+            "advice",
+
+            "easyApply",
+
+            "saveJobs",
+
+            "maxApps",
+
+            "appExpiry",
+
+            "updated_at"
+        ]
+
+    def validate_allowed_domains(self, value):
+
+        return [
+
+            domain.lower().strip()
+
+            for domain in value
+
+            if domain.strip()
+        ]

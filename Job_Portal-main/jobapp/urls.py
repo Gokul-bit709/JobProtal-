@@ -111,6 +111,12 @@ from .views import (
     AdminQuietHoursUpdateView,
     NotificationChannelSettingsView,    
     NotificationChannelSettingsUpdateView,
+    EmployerPlatformSettingsView,
+    CreatePlanView,
+    EmployerWeeklySummaryView,
+    RegisterDeviceTokenView,
+    JobseekerPlatformSettingsView,
+    SimilarJobsAPIView
     
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
@@ -146,6 +152,7 @@ urlpatterns = [
     # Jobs
     path('jobs/', views.JobListView.as_view(), name='job-list'),
     path('jobs/<int:pk>/', views.JobDetailView.as_view(), name='job-detail'),
+     path("jobs/<int:job_id>/similar/", SimilarJobsAPIView.as_view(), name="similar-jobs"),
     path('jobs/create/', views.JobCreateView.as_view(), name='job-create'),
     path('jobs/<int:pk>/update/', views.JobUpdateView.as_view(), name='job-update'),
     path('jobs/<int:pk>/delete/', views.JobDeleteView.as_view(), name='job-delete'),
@@ -171,7 +178,8 @@ urlpatterns = [
     path('notifications/<int:pk>/unread/', MarkNotificationUnreadView.as_view()),
     path('notifications/<int:pk>/delete/', DeleteNotificationView.as_view()),
     path('notifications/clear-all/', ClearAllNotificationsView.as_view()),
-   
+    path('save-fcm-token/', RegisterDeviceTokenView.as_view(), name='save-fcm-token'),
+    
     path("settings/", UserSettingsView.as_view(), name="user-settings"),
     path("jobs/save/", SaveJobView.as_view(), name="save-job"),
     path("jobs/save/<int:job_id>/", SaveJobView.as_view(), name="remove-saved-job"),
@@ -246,6 +254,7 @@ urlpatterns = [
 
     # Billing
     path("plans/", PlanListView.as_view(), name='plan-list'),
+     path('plans/create/', CreatePlanView.as_view(), name='create-plan'), #newly change 14/05
     path("create-order/", CreateOrderView.as_view(), name='create-order'),
     path("subscription/", CurrentSubscriptionView.as_view(), name='current-subscription'),
     path("cancel/", CancelSubscriptionView.as_view(), name='cancel-subscription'),
@@ -338,7 +347,16 @@ urlpatterns = [
     path("admin/2fa/verify-otp/",VerifyAdmin2FAOTPView.as_view(),name="admin-2fa-verify-otp"),
  
     path("admin/2fa/disable/", DisableAdmin2FAView.as_view(),name="admin-2fa-disable"),
+
+
+    #for employer setting 
+
+    path("employer-settings/<int:plan_id>/",EmployerPlatformSettingsView.as_view(), name="employer-platform-settings"),
+    path('employer/weekly-summary/',EmployerWeeklySummaryView.as_view(),name='employer-weekly-summary'),
+
+    # jobseekersetting
+
+    path('jobseeker/settings/',JobseekerPlatformSettingsView.as_view(),name='jobseeker-platform-settings')
  
  
 ]
-
