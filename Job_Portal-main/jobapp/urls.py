@@ -22,6 +22,7 @@ from .views import (
     CompanyProfileCreateView,
     DashboardView,
     DisableAdmin2FAView,
+    HighlightedJobsView,
     JobApplicationReportView,
     JobSeekerRegistrationView,
     EmployerRegistrationView,
@@ -359,8 +360,9 @@ urlpatterns = [
 
     # jobseekersetting
 
-    path('jobseeker/settings/',JobseekerPlatformSettingsView.as_view(),name='jobseeker-platform-settings')
+    path('jobseeker/settings/',JobseekerPlatformSettingsView.as_view(),name='jobseeker-platform-settings'),
 
- 
+    #for jobhighlights
+    path("highlighted-jobs/", HighlightedJobsView.as_view(), name="highlighted-jobs" ),
  
 ]

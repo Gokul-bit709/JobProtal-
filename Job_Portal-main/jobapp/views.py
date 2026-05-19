@@ -7749,3 +7749,42 @@ class AdminDashboardOverviewNewView(APIView):
             status=status.HTTP_200_OK
         )
  
+ #for highlight.jsx
+ 
+class HighlightedJobsView(APIView):
+ 
+    #permission_classes = [IsAuthenticated,IsAdminUserType]
+ 
+    def get(self, request):
+ 
+        jobs = (
+            PostAJob.objects
+            .filter(
+                is_highlighted=True,
+                approval_status=PostAJob.ApprovalStatus.APPROVED,
+                is_published=True,
+            )
+            .select_related(
+                "employer",
+                "employer__employer_profile",
+                "employer__employer_profile__company",
+            )
+            .only(
+                "id",
+                "job_title",
+                "is_highlighted",
+                "highlighted_at",
+                "created_at",
+                "last_date_to_apply",
+                "employer_id",
+            )
+            .order_by("-highlighted_at")
+        )
+ 
+        serializer = HighlightedJobSerializer(
+            jobs,
+            many=True
+        )
+ 
+        return Response(serializer.data)
+ 

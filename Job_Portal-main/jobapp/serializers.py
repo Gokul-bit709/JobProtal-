@@ -4012,3 +4012,88 @@ class JobseekerPlatformSettingsSerializer(
 
             if domain.strip()
         ]
+
+
+#for job highlight
+ 
+class HighlightedJobSerializer(serializers.ModelSerializer):
+ 
+    title = serializers.CharField(
+        source="job_title"
+    )
+ 
+    posted = serializers.SerializerMethodField()
+ 
+    highlightOn = serializers.SerializerMethodField()
+ 
+    expiredOn = serializers.SerializerMethodField()
+ 
+    isHighlighted = serializers.BooleanField(
+        source="is_highlighted"
+    )
+ 
+    company = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = PostAJob
+ 
+        fields = [
+            "id",
+            "title",
+            "company",
+            "posted",
+            "highlightOn",
+            "expiredOn",
+            "isHighlighted"
+        ]
+ 
+    def get_company(self, obj):
+ 
+        try:
+            profile = getattr(
+                obj.employer,
+                "employer_profile",
+                None
+            )
+ 
+            if not profile:
+                return None
+ 
+            company = getattr(
+                profile,
+                "company",
+                None
+            )
+ 
+            return (
+                company.company_name
+                if company
+                else None
+            )
+ 
+        except Exception:
+            return None
+ 
+    def get_posted(self, obj):
+ 
+        return (
+            obj.created_at.strftime("%d %b %Y")
+            if obj.created_at
+            else None
+        )
+ 
+    def get_highlightOn(self, obj):
+ 
+        return (
+            obj.highlighted_at.strftime("%d %b %Y")
+            if obj.highlighted_at
+            else None
+        )
+ 
+    def get_expiredOn(self, obj):
+ 
+        return (
+            obj.last_date_to_apply.strftime("%d %b %Y")
+            if obj.last_date_to_apply
+            else "N/A"
+        )
