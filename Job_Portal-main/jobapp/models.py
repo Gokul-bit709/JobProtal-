@@ -1453,6 +1453,8 @@ class EmailOTP(models.Model):
 
 # About Complaint
 
+ 
+from django.core.validators import RegexValidator
 class Complaint(models.Model):
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
@@ -1484,7 +1486,15 @@ class Complaint(models.Model):
     # Reporter details
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
-    mobile = models.CharField(max_length=10)
+    mobile = models.CharField(
+    max_length=10,
+    validators=[
+        RegexValidator(
+            regex=r'^\d{10}$',
+            message='Enter valid 10-digit mobile number'
+        )
+    ]
+)
     email = models.EmailField()
    
     # Complaint details
@@ -1534,8 +1544,13 @@ class Complaint(models.Model):
                 if self.reported_job.employer.employer_profile.company:
                     self.reported_employer_name = self.reported_job.employer.employer_profile.company.company_name
                     self.reported_company_name = self.reported_job.employer.employer_profile.company.company_name
+ 
+        if self.status == self.Status.RESOLVED:
+            if not self.resolved_at:
+                self.resolved_at = timezone.now()
        
         super().save(*args, **kwargs)
+ 
 
 # Billing
 

@@ -3216,14 +3216,35 @@ class VerifyEmailOTPSerializer(serializers.Serializer):
  
  
 # Report a Job Serializer
-class ComplaintSerializer(serializers.ModelSerializer):
-    firstName = serializers.CharField(source='first_name')
-    lastName = serializers.CharField(source='last_name')
+ 
+class ComplaintSerializer(
+    serializers.ModelSerializer
+):
+ 
+    firstName = serializers.CharField(
+        source='first_name'
+    )
+ 
+    lastName = serializers.CharField(
+        source='last_name'
+    )
+    jobId = serializers.IntegerField(
+    source='reported_job.id',
+    read_only=True
+)
+    date = serializers.SerializerMethodField()
+ 
+    status = serializers.SerializerMethodField()
+ 
+    priority = serializers.SerializerMethodField()
  
     class Meta:
+ 
         model = Complaint
+ 
         fields = [
             'id',
+            'jobId',
             'firstName',
             'lastName',
             'mobile',
@@ -3231,22 +3252,89 @@ class ComplaintSerializer(serializers.ModelSerializer):
             'reason',
             'explanation',
             'status',
-            'created_at'
+            'priority',
+            'date'
         ]
-        read_only_fields = ['status', 'created_at']
+ 
+        read_only_fields = [
+            'status',
+            'priority',
+            'date'
+        ]
+ 
+    def get_date(self, obj):
+ 
+        if obj.created_at:
+ 
+            local_dt = timezone.localtime(
+                obj.created_at
+            )
+ 
+            return local_dt.strftime(
+                "%b %d, %Y, %I:%M %p"
+            )
+ 
+        return None
+ 
+    def get_status(self, obj):
+ 
+        mapping = {
+            Complaint.Status.PENDING: "Pending",
+            Complaint.Status.INVESTIGATING: "In Progress",
+            Complaint.Status.RESOLVED: "Resolved",
+            Complaint.Status.REJECTED: "Rejected"
+        }
+ 
+        return mapping.get(
+            obj.status,
+            obj.status
+        )
+ 
+    def get_priority(self, obj):
+ 
+        return get_priority_from_reason(
+            obj.reason
+        )
  
     def validate_mobile(self, value):
+ 
         if not value.isdigit() or len(value) != 10:
-            raise serializers.ValidationError("Enter valid 10-digit mobile number")
+ 
+            raise serializers.ValidationError(
+                "Enter valid 10-digit mobile number"
+            )
+ 
         return value
  
     def validate(self, data):
-        user = self.context['request'].user
  
-        if Complaint.objects.filter(user=user, reason=data.get('reason')).exists():
-            raise serializers.ValidationError("You already submitted this complaint")
+        request = self.context.get('request')
+ 
+        if not request:
+            return data
+ 
+        user = request.user
+ 
+        reported_job = data.get(
+            'reported_job'
+        )
+ 
+        if (
+            reported_job and
+            Complaint.objects.filter(
+                user=user,
+                reported_job=reported_job
+            ).exists()
+        ):
+ 
+            raise serializers.ValidationError(
+                "You already submitted "
+                "complaint for this job"
+            )
  
         return data
+   
+ 
     
 # Billing Serializer
 

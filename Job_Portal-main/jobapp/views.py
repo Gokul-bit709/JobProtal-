@@ -3280,104 +3280,134 @@ class VerifyLoginOTPView(APIView):
  
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)'''
 
+ 
 class SubmitComplaintView(APIView):
-
+ 
     permission_classes = [
         IsAuthenticated,
         IsJobSeeker
     ]
-
-    def post(self, request):
-
+ 
+    def post(self, request, job_id):
+ 
+        try:
+ 
+            job = PostAJob.objects.get(
+                id=job_id
+            )
+ 
+        except PostAJob.DoesNotExist:
+ 
+            return Response(
+                {"error": "Job not found"},
+                status=404
+            )
+ 
         serializer = ComplaintSerializer(
-
+ 
             data=request.data,
-
+ 
             context={
                 'request': request
             }
         )
-
+ 
         if serializer.is_valid():
-
+ 
+            # Prevent duplicate complaint
+            if Complaint.objects.filter(
+                user=request.user,
+                reported_job=job
+            ).exists():
+ 
+                return Response(
+                    {
+                        "error":
+                        "You already submitted "
+                        "complaint for this job"
+                    },
+                    status=400
+                )
+ 
             complaint = serializer.save(
-                user=request.user
+ 
+                user=request.user,
+ 
+                reported_job=job
             )
-
-
+ 
+# ---------------------------------------------------------------------------------------------------------------------
+ 
             admins = User.objects.filter(
                 user_type="admin"
             )
-
+ 
             for admin in admins:
-
+ 
                 NotificationService.create_notification(
-
-    recipient=admin,
-
-    title="New Complaint Submitted",
-
-    message=(
-
-        f"{request.user.username} "
-
-        f"submitted a complaint."
-    ),
-
-    category="alert",
-
-    event_type="complaint_submitted",
-
-    notification_type="system",
-
-    related_object_id=complaint.id
-)
-
-
-
+ 
+                    recipient=admin,
+ 
+                    title="New Complaint Submitted",
+ 
+                    message=(
+                        f"{request.user.username} "
+                        f"submitted a complaint."
+                    ),
+ 
+                    category="alert",
+ 
+                    event_type="complaint_submitted",
+ 
+                    notification_type="system",
+ 
+                    related_object_id=complaint.id
+                )
+ 
+# ---------------------------------------------------------------------------------------------------------------------
+ 
             NotificationService.create_notification(
-
-    recipient=request.user,
-
-    title="Complaint Submitted",
-
-    message=(
-
-        "Your complaint "
-
-        "has been submitted successfully."
-    ),
-
-    category="system",
-
-    event_type="complaint_submitted",
-
-    notification_type="system",
-
-    related_object_id=complaint.id
-)
-
+ 
+                recipient=request.user,
+ 
+                title="Complaint Submitted",
+ 
+                message=(
+                    "Your complaint "
+                    "has been submitted successfully."
+                ),
+ 
+                category="system",
+ 
+                event_type="complaint_submitted",
+ 
+                notification_type="system",
+ 
+                related_object_id=complaint.id
+            )
+ 
+# ---------------------------------------------------------------------------------------------------------------------
+ 
             return Response(
-
+ 
                 {
-                    "message": (
-                        "Complaint submitted successfully"
-                    )
+                    "message":
+                    "Complaint submitted successfully"
                 },
-
+ 
                 status=status.HTTP_201_CREATED
             )
-
+ 
         return Response(
-
+ 
             serializer.errors,
-
+ 
             status=status.HTTP_400_BAD_REQUEST
         )
  
-
+ 
 class AdminComplaintListView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUserType]
+    #permission_classes = [IsAuthenticated, IsAdminUserType]
  
     def get(self, request):
         complaints = Complaint.objects.all().order_by('-created_at')
@@ -3389,42 +3419,103 @@ class AdminComplaintListView(APIView):
         serializer = ComplaintSerializer(complaints, many=True)
         return Response(serializer.data)
  
-
 class AdminUpdateComplaintView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    #permission_classes = [IsAuthenticated,IsAdminUserType]
  
     def patch(self, request, pk):
+ 
         try:
-            complaint = Complaint.objects.get(id=pk)
+ 
+            complaint = Complaint.objects.get(
+                id=pk
+            )
+ 
         except Complaint.DoesNotExist:
-            return Response({"error": "Not found"}, status=404)
  
-        complaint.status = request.data.get("status", complaint.status)
+            return Response(
+                {"error": "Complaint not found"},
+                status=404
+            )
+ 
+        frontend_status = request.data.get(
+            "status"
+        )
+ 
+        # Only allowed frontend statuses
+        status_mapping = {
+            "Pending": "pending",
+            "In Progress": "investigating",
+            "Resolved": "resolved",
+        }
+ 
+        # Invalid status
+        if frontend_status not in status_mapping:
+ 
+            return Response(
+                {
+                    "error":
+                    "Invalid status selected"
+                },
+                status=400
+            )
+ 
+        db_status = status_mapping[
+            frontend_status
+        ]
+ 
+        # Already same status
+        if complaint.status == db_status:
+ 
+            return Response(
+                {
+                    "error":
+                    f"Complaint is already "
+                    f"{frontend_status}"
+                },
+                status=400
+            )
+ 
+        # Update status
+        complaint.status = db_status
         complaint.save()
-#---------------------------------------------------------------------------------------------------------------------
-        NotificationService.create_notification(
-
-    recipient=complaint.user,
-
-    title="Complaint Status Updated",
-
-    message=(
-        f"Your complaint status "
-        f"has been updated to "
-        f"'{complaint.status}'."
-    ),
-
-    category="alert",
-
-    event_type="complaint_status_updated",
-
-    notification_type="complaint",
-
-    related_object_id=complaint.id
-)
-#-----------------------------------------------------------------------------------------------------------------------
  
-        return Response({"message": "Status updated"})
+# ---------------------------------------------------------------------------------------------------------------------
+ 
+        NotificationService.create_notification(
+ 
+            recipient=complaint.user,
+ 
+            title="Complaint Status Updated",
+ 
+            message=(
+                f"Your complaint status "
+                f"has been updated to "
+                f"'{frontend_status}'."
+            ),
+ 
+            category="alert",
+ 
+            event_type="complaint_status_updated",
+ 
+            notification_type="complaint",
+ 
+            related_object_id=complaint.id
+        )
+ 
+# ---------------------------------------------------------------------------------------------------------------------
+ 
+        return Response({
+ 
+            "message": "Status updated",
+ 
+            "data": {
+                "id": complaint.id,
+                "status": frontend_status
+            }
+ 
+        }, status=200)
+ 
     
 # ============ BILLING VIEWS ============
 

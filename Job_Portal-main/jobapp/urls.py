@@ -366,3 +366,4 @@ urlpatterns = [
     path("highlighted-jobs/", HighlightedJobsView.as_view(), name="highlighted-jobs" ),
  
 ]
+
