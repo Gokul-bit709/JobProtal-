@@ -16,6 +16,8 @@ from .views import (
     AdminJobRejectView,
     AdminJobStatsView,
     AdminLoginView,
+    AdminTicketListView,
+    AdminTicketUpdateView,
     AdminTrustedDeviceListView,
     AdminUpdateComplaintView,
     ApplicationFlagReadStatusView,
@@ -118,7 +120,7 @@ from .views import (
     EmployerWeeklySummaryView,
     RegisterDeviceTokenView,
     JobseekerPlatformSettingsView,
-    SimilarJobsAPIView
+    SimilarJobsAPIView,AdminTicketDeleteView,
     
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
@@ -208,7 +210,18 @@ urlpatterns = [
     path('admin/create-password-token/', AdminCreatePasswordTokenView.as_view(), name='admin-create-password-token'),
     
     # raise ticket
-    path('raise-ticket/', RaiseTicketCreateView.as_view(), name='raise-ticket'),
+    # CREATE TICKET
+    path('raise-ticket/',RaiseTicketCreateView.as_view(), name='raise-ticket'),
+ 
+    # ADMIN LIST ALL TICKETS
+    path('admin/tickets/',AdminTicketListView.as_view(),name='admin-ticket-list'),
+ 
+    # ADMIN UPDATE TICKET STATUS
+    path('admin/tickets/<int:pk>/update/',AdminTicketUpdateView.as_view(), name='admin-ticket-update'),
+ 
+    # ADMIN / USER DELETE TICKET
+    path('admin/tickets/<int:pk>/delete/',AdminTicketDeleteView.as_view(),name='admin-ticket-delete'),
+ 
     
     # contact 
     path('contact/', ContactMessageCreateAPIView.as_view(), name='contact-message'),

@@ -1090,13 +1090,13 @@ class HelpTopic(models.Model):
     def __str__(self):
         return self.title
 
-
 class RaiseTicket(models.Model):
+ 
     CATEGORY_CHOICES = (
         ('Jobseeker', 'Jobseeker'),
         ('Employer', 'Employer'),
     )
-
+ 
     SUBJECT_CHOICES = (
         ("Broken 'Apply' Button/Application Failure", "Broken 'Apply' Button/Application Failure"),
         ("File Upload/Resume Parsing Errors", "File Upload/Resume Parsing Errors"),
@@ -1110,19 +1110,78 @@ class RaiseTicket(models.Model):
         ("Duplicate Job Listings (Spam)", "Duplicate Job Listings (Spam)"),
         ("Others", "Others"),
     )
-
-    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
-    subject = models.CharField(max_length=255, choices=SUBJECT_CHOICES)
-    name = models.CharField(max_length=150)
+ 
+    PRIORITY_CHOICES = (
+        ('Low', 'Low'),
+        ('Medium', 'Medium'),
+        ('High', 'High'),
+    )
+ 
+    STATUS_CHOICES = (
+        ('Pending', 'Pending'),
+        ('In Progress', 'In Progress'),
+        ('Hold', 'Hold'),
+        ('Resolved', 'Resolved'),
+    )
+ 
+    category = models.CharField(
+        max_length=50,
+        choices=CATEGORY_CHOICES
+    )
+ 
+    subject = models.CharField(
+        max_length=255,
+        choices=SUBJECT_CHOICES
+    )
+ 
+    name = models.CharField(
+        max_length=150
+    )
+ 
     email = models.EmailField()
-    phone = models.CharField(max_length=20)
-    message = models.TextField(blank=True, null=True)
-    attachment = models.FileField(upload_to='tickets/', blank=True, null=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
+ 
+    phone = models.CharField(
+        max_length=20
+    )
+ 
+    message = models.TextField(
+        blank=True,
+        null=True
+    )
+ 
+    attachment = models.FileField(
+        upload_to='tickets/',
+        blank=True,
+        null=True
+    )
+ 
+    # NEW FIELD
+    priority = models.CharField(
+        max_length=20,
+        choices=PRIORITY_CHOICES,
+        default='Medium'
+    )
+ 
+    # NEW FIELD
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='Pending'
+    )
+ 
+    # NEW FIELD
+    resolved_on = models.DateField(
+        blank=True,
+        null=True
+    )
+ 
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+ 
     def __str__(self):
         return f"{self.name} - {self.subject}"
+ 
 
 
 # Password

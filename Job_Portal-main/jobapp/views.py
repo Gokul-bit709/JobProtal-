@@ -2288,106 +2288,349 @@ def help_topics(request):
     })
  
 
+ 
 class RaiseTicketCreateView(APIView):
+ 
+    parser_classes = [
+        MultiPartParser,
+        FormParser,
+        JSONParser
+    ]
+ 
     def get(self, request):
+ 
         return Response({
             "status": True,
             "message": "Raise Ticket API Working"
         })
  
     def post(self, request):
-
+ 
         serializer = RaiseTicketSerializer(
             data=request.data
         )
-
+ 
         if serializer.is_valid():
-
+ 
             ticket = serializer.save()
-
-  
-
+ 
+            # NOTIFY ADMINS
             admins = User.objects.filter(
                 user_type="admin"
             )
-
+ 
             for admin in admins:
-
+ 
                 NotificationService.create_notification(
-
-    recipient=admin,
-
-    title="New Support Ticket",
-
-    message=(
-
-        f"A new support ticket "
-
-        f"was raised by "
-
-        f"{ticket.name}."
-    ),
-
-    category="alert",
-
-    event_type="support_ticket_created",
-
-    notification_type="system",
-
-    related_object_id=ticket.id
-)
-
-           
-
+ 
+                    recipient=admin,
+ 
+                    title="New Support Ticket",
+ 
+                    message=(
+                        f"A new support ticket "
+                        f"was raised by "
+                        f"{ticket.name}."
+                    ),
+ 
+                    category="alert",
+ 
+                    event_type="support_ticket_created",
+ 
+                    notification_type="system",
+ 
+                    related_object_id=ticket.id
+                )
+ 
+            # NOTIFY USER
             if request.user.is_authenticated:
-
+ 
                 NotificationService.create_notification(
-
-    recipient=request.user,
-
-    title="Ticket Submitted",
-
-    message=(
-
-        "Your support ticket "
-
-        "has been submitted successfully."
-    ),
-
-    category="system",
-
-    event_type="ticket_submitted",
-
-    notification_type="system",
-
-    related_object_id=ticket.id
-)
-
+ 
+                    recipient=request.user,
+ 
+                    title="Ticket Submitted",
+ 
+                    message=(
+                        "Your support ticket "
+                        "has been submitted successfully."
+                    ),
+ 
+                    category="system",
+ 
+                    event_type="ticket_submitted",
+ 
+                    notification_type="system",
+ 
+                    related_object_id=ticket.id
+                )
+ 
             return Response(
-
                 {
                     "status": True,
-
+ 
                     "message": (
                         "Ticket submitted successfully"
                     ),
-
-                    "data": serializer.data
+ 
+                    "data": AdminTicketSerializer(
+                        ticket,
+                        context={'request': request}
+                    ).data
                 },
-
+ 
                 status=status.HTTP_201_CREATED
             )
-
+ 
         return Response(
-
             {
                 "status": False,
-
+ 
                 "errors": serializer.errors
             },
-
+ 
             status=status.HTTP_400_BAD_REQUEST
         )
+ 
+ 
+# ADMIN LIST TICKETS
+class AdminTicketListView(APIView):
+ 
+    permission_classes = [
+        IsAuthenticated,
+        IsAdminUser
+    ]
+ 
+    def get(self, request):
+ 
+        tickets = RaiseTicket.objects.all().order_by(
+            '-created_at'
+        )
+ 
+        serializer = AdminTicketSerializer(
+            tickets,
+            many=True,
+            context={'request': request}
+        )
+ 
+        return Response({
+            "status": True,
+            "count": tickets.count(),
+            "data": serializer.data
+        })
+   
+class AdminTicketUpdateView(APIView):
+ 
+    permission_classes = [
+        IsAuthenticated,
+        IsAdminUser
+    ]
+ 
+    VALID_STATUSES = [
+        "Pending",
+        "In Progress",
+        "Hold",
+        "Resolved"
+    ]
+ 
+    def patch(self, request, pk):
+ 
+        try:
+ 
+            ticket = RaiseTicket.objects.get(
+                id=pk
+            )
+ 
+        except RaiseTicket.DoesNotExist:
+ 
+            return Response(
+                {
+                    "status": False,
+                    "message": "Ticket not found"
+                },
+ 
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+        old_status = ticket.status
+ 
+        new_status = request.data.get(
+            "status"
+        )
+ 
+        if not new_status:
+ 
+            return Response(
+                {
+                    "status": False,
+                    "message": "status field is required"
+                },
+ 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        if new_status not in self.VALID_STATUSES:
+ 
+            return Response(
+                {
+                    "status": False,
+                    "message": "Invalid status"
+                },
+ 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        ticket.status = new_status
+ 
+        # AUTO RESOLVED DATE
+        if new_status == "Resolved":
+ 
+            ticket.resolved_on = timezone.now().date()
+ 
+        else:
+ 
+            ticket.resolved_on = None
+ 
+        ticket.save()
+ 
+        # NOTIFY TICKET OWNER
+        user = User.objects.filter(
+            email=ticket.email
+        ).first()
+ 
+        if user:
+ 
+            NotificationService.create_notification(
+ 
+                recipient=user,
+ 
+                title="Ticket Status Updated",
+ 
+                message=(
+                    f"Your support ticket "
+                    f"status changed from "
+                    f"{old_status} to "
+                    f"{new_status}."
+                ),
+ 
+                category="system",
+ 
+                event_type="ticket_status_updated",
+ 
+                notification_type="system",
+ 
+                related_object_id=ticket.id
+            )
+ 
+        return Response({
+            "status": True,
+ 
+            "message": (
+                "Ticket status updated successfully"
+            ),
+ 
+            "data": AdminTicketSerializer(
+                ticket,
+                context={'request': request}
+            ).data
+        })
+ 
+class AdminTicketDeleteView(APIView):
+ 
+    permission_classes = [
+        IsAuthenticated,
+    ]
+ 
+    def delete(self, request, pk):
+ 
+        try:
+ 
+            ticket = RaiseTicket.objects.get(
+                id=pk
+            )
+ 
+        except RaiseTicket.DoesNotExist:
+ 
+            return Response(
+                {
+                    "status": False,
+                    "message": "Ticket not found"
+                },
+ 
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+        # CHECK PERMISSION
+        is_admin = (
+            hasattr(request.user, "user_type") and
+            request.user.user_type == "admin"
+        )
+ 
+        is_ticket_owner = (
+            request.user.email == ticket.email
+        )
+ 
+        if not is_admin and not is_ticket_owner:
+ 
+            return Response(
+                {
+                    "status": False,
+                    "message": (
+                        "You do not have permission "
+                        "to delete this ticket"
+                    )
+                },
+ 
+                status=status.HTTP_403_FORBIDDEN
+            )
+ 
+        # SEND NOTIFICATION
+        user = User.objects.filter(
+            email=ticket.email
+        ).first()
+ 
+        if user:
+ 
+            NotificationService.create_notification(
+ 
+                recipient=user,
+ 
+                title="Support Ticket Removed",
+ 
+                message=(
+                    f"Your support ticket "
+                    f"'{ticket.subject}' "
+                    f"is no longer available."
+                ),
+ 
+                category="alert",
+ 
+                event_type="ticket_deleted",
+ 
+                notification_type="system",
+ 
+                related_object_id=ticket.id
+            )
+ 
+        # DELETE ATTACHMENT
+        if ticket.attachment:
+ 
+            ticket.attachment.delete(
+                save=False
+            )
+ 
+        # DELETE TICKET
+        ticket.delete()
+ 
+        return Response({
+            "status": True,
+            "message": "Ticket deleted successfully"
+        })
+ 
+ 
+
+
+ 
 # ============ PASSWORD MANAGEMENT ============
 
 class ForgotPasswordView(APIView):

@@ -2805,9 +2805,80 @@ class HelpTopicSerializer(serializers.ModelSerializer):
  
  
 class RaiseTicketSerializer(serializers.ModelSerializer):
+ 
     class Meta:
         model = RaiseTicket
-        fields = '__all__'
+        fields = [
+            'id',
+            'category',
+            'subject',
+            'name',
+            'email',
+            'phone',
+            'message',
+            'attachment',
+            'priority',
+        ]
+ 
+        read_only_fields = ['id']
+ 
+ 
+class AdminTicketSerializer(serializers.ModelSerializer):
+ 
+    mobile = serializers.CharField(
+        source='phone',
+        read_only=True
+    )
+ 
+    date = serializers.SerializerMethodField()
+ 
+    resolvedon = serializers.SerializerMethodField()
+ 
+    attachment = serializers.SerializerMethodField()
+ 
+    class Meta:
+        model = RaiseTicket
+ 
+        fields = [
+            'id',
+            'subject',
+            'name',
+            'category',
+            'priority',
+            'status',
+            'date',
+            'resolvedon',
+            'mobile',
+            'email',
+            'message',
+            'attachment',
+        ]
+ 
+    def get_date(self, obj):
+ 
+        if obj.created_at:
+            return obj.created_at.strftime('%d/%m/%Y')
+ 
+        return None
+ 
+    def get_resolvedon(self, obj):
+ 
+        if obj.resolved_on:
+            return obj.resolved_on.strftime('%d/%m/%Y')
+ 
+        return None
+ 
+    def get_attachment(self, obj):
+ 
+        request = self.context.get("request")
+ 
+        if obj.attachment and request:
+            return request.build_absolute_uri(
+                obj.attachment.url
+            )
+ 
+        return None
+ 
  
  
 # Password Serializers
