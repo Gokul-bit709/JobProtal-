@@ -22,6 +22,8 @@ from .views import (
     AdminUpdateComplaintView,
     ApplicationFlagReadStatusView,
     CompanyProfileCreateView,
+    ContactMessageListAPIView,
+    ContactMessageStatusUpdateAPIView,
     DashboardView,
     DisableAdmin2FAView,
     HighlightedJobsView,
@@ -224,8 +226,13 @@ urlpatterns = [
  
     
     # contact 
-    path('contact/', ContactMessageCreateAPIView.as_view(), name='contact-message'),
-    
+    # contact  create
+    path( "contact/create/", ContactMessageCreateAPIView.as_view(), name="contact-create" ),
+        #contact list
+    path("contact/list/",ContactMessageListAPIView.as_view(),name="contact-list" ),
+     #contact update
+    path("contact/update/<int:pk>/",ContactMessageStatusUpdateAPIView.as_view(),name="contact-update"),
+ 
     # newsletter subscribe
     path("subscribe/", NewsletterSubscribeAPIView.as_view(), name="subscribe-newsletter"),
     

@@ -2919,10 +2919,44 @@ class CreatePasswordSerializer(serializers.Serializer):
  
  
 # Contact Us Serializer
+# Contact Us Serializer
 class ContactMessageSerializer(serializers.ModelSerializer):
+ 
     class Meta:
         model = ContactMessage
-        fields = '__all__'    
+ 
+        fields = [
+            'id',
+            'user',
+            'name',
+            'email',
+            'contact',
+            'message',
+            'status',
+            'created_at'
+        ]
+ 
+        read_only_fields = [
+            'id',
+            'user',
+            'status',
+            'created_at'
+        ]
+ 
+    def validate_contact(self, value):
+ 
+        if not value.isdigit():
+            raise serializers.ValidationError(
+                "Contact number must contain digits only"
+            )
+ 
+        if len(value) != 10:
+            raise serializers.ValidationError(
+                "Contact number must be 10 digits"
+            )
+ 
+        return value
+    
  
 '''
 # CompanyVerify Serializer

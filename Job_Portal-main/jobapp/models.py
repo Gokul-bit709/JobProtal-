@@ -1205,15 +1205,34 @@ class PasswordResetToken(models.Model):
         super().save(*args, **kwargs)
 
 
+ 
 class ContactMessage(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "Pending", "Pending"
+        CONTACTED = "Contacted","Contacted"
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="contact_messages"
+    )
     name = models.CharField(max_length=150)
     email = models.EmailField()
     contact = models.CharField(max_length=15)
     message = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING
+    )
     created_at = models.DateTimeField(auto_now_add=True)
-
+ 
     def __str__(self):
         return f"{self.name} - {self.email}"
+   
+ 
+ 
 
 
 # Company Verify
