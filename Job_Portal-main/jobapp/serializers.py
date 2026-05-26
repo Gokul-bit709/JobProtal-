@@ -3362,10 +3362,18 @@ class ComplaintSerializer(
         )
  
     def get_priority(self, obj):
- 
-        return get_priority_from_reason(
-            obj.reason
-        )
+    # Define a simple mapping or logic for priority based on reason
+       def get_priority_from_reason(reason):
+        # Example logic: you can adjust as needed
+        priority_map = {
+            "Fraud": "High",
+            "Spam": "Medium",
+            "Other": "Low"
+        }
+        return priority_map.get(reason, "Low")
+       return get_priority_from_reason(
+    obj.reason
+    )
  
     def validate_mobile(self, value):
  

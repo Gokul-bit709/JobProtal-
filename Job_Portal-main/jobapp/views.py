@@ -14,6 +14,23 @@ from django.db import IntegrityError
 from django.db.models import Q, Count
 from datetime import timedelta
 import logging
+import random
+import razorpay
+from django.conf import settings
+from django.db.models import (
+    Count,
+    Sum,
+    Q,
+    DecimalField,
+)
+ 
+from django.db.models.functions import (
+    TruncMonth,
+    Coalesce
+)
+
+# Initialize Razorpay client
+client = razorpay.Client(auth=(settings.RAZORPAY_KEY, settings.RAZORPAY_SECRET))
 
 
 from .serializers import (
@@ -691,7 +708,8 @@ from django.db.models import (
     Case,
     When,
     Value,
-    IntegerField
+    IntegerField,
+    Sum
 )
 
 from django.db.models.functions import (
@@ -7332,7 +7350,7 @@ class JobseekerPlatformSettingsView(APIView):
 
     #permission_classes = [IsAuthenticated,IsAdminUserType]
 
-   
+    
 
     def get(self, request):
 
@@ -7398,6 +7416,28 @@ class JobseekerPlatformSettingsView(APIView):
 class AdminDashboardOverviewNewView(APIView):
  
     # permission_classes = [IsAuthenticated, IsAdminUserType]
+
+       
+    def _month_label(dt):
+        return dt.strftime("%b")
+     
+     
+    def _trend(today_val, yesterday_val):
+     
+        if yesterday_val == 0:
+            return "0.0%"
+     
+        change = (
+            (today_val - yesterday_val) / yesterday_val
+        ) * 100
+     
+        return f"{abs(change):.1f}%"
+     
+     
+    def _is_up(today_val, yesterday_val):
+        return today_val >= yesterday_val
+    
+
  
     def get(self, request):
  
@@ -7421,7 +7461,25 @@ class AdminDashboardOverviewNewView(APIView):
         four_months_ago = (
             now - timedelta(days=120)
         )
- 
+
+        # ─────────────────────────────────────
+        # HELPER FUNCTIONS
+        # ─────────────────────────────────────
+
+        def _month_label(dt):
+            return dt.strftime("%b")
+        
+        def _trend(today_val, yesterday_val):
+            if yesterday_val == 0:
+                return "0.0%"
+            change = (
+                (today_val - yesterday_val) / yesterday_val
+            ) * 100
+            return f"{abs(change):.1f}%"
+        
+        def _is_up(today_val, yesterday_val):
+            return today_val >= yesterday_val
+
        
         # USER STATS
        
