@@ -39,6 +39,7 @@ from .views import (
     SubmitComplaintView,
     UpdateCompanyStatusView,
     AdminCompanyDetailView,
+    AdminProfilePhotoView,
     UserListView,
     UserSettingsView,
     SaveJobView,
@@ -281,6 +282,10 @@ urlpatterns = [
     path('company/', AdminCompanyListView.as_view(), name='dashboardlist'),
     path('company/<int:pk>/', AdminCompanyDetailView.as_view(), name='company-detail'),
     path('company/<int:pk>/status/', UpdateCompanyStatusView.as_view(), name='update-company-status'),
+
+    #AdminHeader
+    path('admin/profile/photo/', AdminProfilePhotoView.as_view(), name='admin-profile-photo'),
+    
     #UserManagement
     path('users/', UserListView.as_view(), name='user-list'),
     path('users/<int:pk>/status/', UserStatusUpdateView.as_view(), name='user-status-update'),

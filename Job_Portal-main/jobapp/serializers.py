@@ -4190,6 +4190,24 @@ class JobseekerPlatformSettingsSerializer(
         ]
 
 
+#for admin profile photo
+
+class AdminProfilePhotoSerializer(serializers.ModelSerializer):
+    photo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AdminProfile
+        fields = ['photo_url']
+
+    def get_photo_url(self, obj):
+        request = self.context.get('request')
+        if obj.profile_photo:
+            if request:
+                return request.build_absolute_uri(obj.profile_photo.url)
+            return obj.profile_photo.url
+        return None
+
+
 #for job highlight
  
 class HighlightedJobSerializer(serializers.ModelSerializer):
