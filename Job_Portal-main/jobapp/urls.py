@@ -16,14 +16,10 @@ from .views import (
     AdminJobRejectView,
     AdminJobStatsView,
     AdminLoginView,
-    AdminTicketListView,
-    AdminTicketUpdateView,
     AdminTrustedDeviceListView,
     AdminUpdateComplaintView,
     ApplicationFlagReadStatusView,
     CompanyProfileCreateView,
-    ContactMessageListAPIView,
-    ContactMessageStatusUpdateAPIView,
     DashboardView,
     DisableAdmin2FAView,
     HighlightedJobsView,
@@ -42,6 +38,7 @@ from .views import (
     SendAdmin2FAOTPView,
     SubmitComplaintView,
     UpdateCompanyStatusView,
+    AdminCompanyDetailView,
     UserListView,
     UserSettingsView,
     SaveJobView,
@@ -122,7 +119,7 @@ from .views import (
     EmployerWeeklySummaryView,
     RegisterDeviceTokenView,
     JobseekerPlatformSettingsView,
-    SimilarJobsAPIView,AdminTicketDeleteView,
+    SimilarJobsAPIView
     
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
@@ -212,27 +209,11 @@ urlpatterns = [
     path('admin/create-password-token/', AdminCreatePasswordTokenView.as_view(), name='admin-create-password-token'),
     
     # raise ticket
-    # CREATE TICKET
-    path('raise-ticket/',RaiseTicketCreateView.as_view(), name='raise-ticket'),
- 
-    # ADMIN LIST ALL TICKETS
-    path('admin/tickets/',AdminTicketListView.as_view(),name='admin-ticket-list'),
- 
-    # ADMIN UPDATE TICKET STATUS
-    path('admin/tickets/<int:pk>/update/',AdminTicketUpdateView.as_view(), name='admin-ticket-update'),
- 
-    # ADMIN / USER DELETE TICKET
-    path('admin/tickets/<int:pk>/delete/',AdminTicketDeleteView.as_view(),name='admin-ticket-delete'),
- 
+    path('raise-ticket/', RaiseTicketCreateView.as_view(), name='raise-ticket'),
     
     # contact 
-    # contact  create
-    path( "contact/create/", ContactMessageCreateAPIView.as_view(), name="contact-create" ),
-        #contact list
-    path("contact/list/",ContactMessageListAPIView.as_view(),name="contact-list" ),
-     #contact update
-    path("contact/update/<int:pk>/",ContactMessageStatusUpdateAPIView.as_view(),name="contact-update"),
- 
+    path('contact/', ContactMessageCreateAPIView.as_view(), name='contact-message'),
+    
     # newsletter subscribe
     path("subscribe/", NewsletterSubscribeAPIView.as_view(), name="subscribe-newsletter"),
     
@@ -298,6 +279,7 @@ urlpatterns = [
     #ActivityMonitor
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('company/', AdminCompanyListView.as_view(), name='dashboardlist'),
+    path('company/<int:pk>/', AdminCompanyDetailView.as_view(), name='company-detail'),
     path('company/<int:pk>/status/', UpdateCompanyStatusView.as_view(), name='update-company-status'),
     #UserManagement
     path('users/', UserListView.as_view(), name='user-list'),
@@ -386,4 +368,3 @@ urlpatterns = [
     path("highlighted-jobs/", HighlightedJobsView.as_view(), name="highlighted-jobs" ),
  
 ]
-

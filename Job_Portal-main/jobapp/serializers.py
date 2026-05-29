@@ -2805,80 +2805,9 @@ class HelpTopicSerializer(serializers.ModelSerializer):
  
  
 class RaiseTicketSerializer(serializers.ModelSerializer):
- 
     class Meta:
         model = RaiseTicket
-        fields = [
-            'id',
-            'category',
-            'subject',
-            'name',
-            'email',
-            'phone',
-            'message',
-            'attachment',
-            'priority',
-        ]
- 
-        read_only_fields = ['id']
- 
- 
-class AdminTicketSerializer(serializers.ModelSerializer):
- 
-    mobile = serializers.CharField(
-        source='phone',
-        read_only=True
-    )
- 
-    date = serializers.SerializerMethodField()
- 
-    resolvedon = serializers.SerializerMethodField()
- 
-    attachment = serializers.SerializerMethodField()
- 
-    class Meta:
-        model = RaiseTicket
- 
-        fields = [
-            'id',
-            'subject',
-            'name',
-            'category',
-            'priority',
-            'status',
-            'date',
-            'resolvedon',
-            'mobile',
-            'email',
-            'message',
-            'attachment',
-        ]
- 
-    def get_date(self, obj):
- 
-        if obj.created_at:
-            return obj.created_at.strftime('%d/%m/%Y')
- 
-        return None
- 
-    def get_resolvedon(self, obj):
- 
-        if obj.resolved_on:
-            return obj.resolved_on.strftime('%d/%m/%Y')
- 
-        return None
- 
-    def get_attachment(self, obj):
- 
-        request = self.context.get("request")
- 
-        if obj.attachment and request:
-            return request.build_absolute_uri(
-                obj.attachment.url
-            )
- 
-        return None
- 
+        fields = '__all__'
  
  
 # Password Serializers
@@ -2919,44 +2848,10 @@ class CreatePasswordSerializer(serializers.Serializer):
  
  
 # Contact Us Serializer
-# Contact Us Serializer
 class ContactMessageSerializer(serializers.ModelSerializer):
- 
     class Meta:
         model = ContactMessage
- 
-        fields = [
-            'id',
-            'user',
-            'name',
-            'email',
-            'contact',
-            'message',
-            'status',
-            'created_at'
-        ]
- 
-        read_only_fields = [
-            'id',
-            'user',
-            'status',
-            'created_at'
-        ]
- 
-    def validate_contact(self, value):
- 
-        if not value.isdigit():
-            raise serializers.ValidationError(
-                "Contact number must contain digits only"
-            )
- 
-        if len(value) != 10:
-            raise serializers.ValidationError(
-                "Contact number must be 10 digits"
-            )
- 
-        return value
-    
+        fields = '__all__'    
  
 '''
 # CompanyVerify Serializer
@@ -3396,18 +3291,10 @@ class ComplaintSerializer(
         )
  
     def get_priority(self, obj):
-    # Define a simple mapping or logic for priority based on reason
-       def get_priority_from_reason(reason):
-        # Example logic: you can adjust as needed
-        priority_map = {
-            "Fraud": "High",
-            "Spam": "Medium",
-            "Other": "Low"
-        }
-        return priority_map.get(reason, "Low")
-       return get_priority_from_reason(
-    obj.reason
-    )
+ 
+        return get_priority_from_reason(
+            obj.reason
+        )
  
     def validate_mobile(self, value):
  
@@ -3496,6 +3383,94 @@ class AdminCompanySerializer(serializers.ModelSerializer):
     def get_name(self, obj):
         return obj.legal_name
 
+
+class AdminCompanyDetailSerializer(serializers.ModelSerializer):
+    """
+    Full detail serializer for Quick View modal.
+    Returns nested company_profile and verification_details
+    to match the shape the frontend modal expects.
+    """
+    company_profile = serializers.SerializerMethodField()
+    verification_details = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompanyVerification
+        fields = ['id', 'company_profile', 'verification_details']
+
+    def get_company_profile(self, obj):
+        """
+        Pull data from CompanyProfile (linked via employer -> employer_profile -> company).
+        Falls back gracefully if the profile doesn't exist yet.
+        """
+        request = self.context.get('request')
+        profile = None
+        try:
+            profile = obj.employer.employer_profile.company
+        except Exception:
+            pass
+
+        def logo_url(img_field):
+            if not img_field:
+                return None
+            if request:
+                return request.build_absolute_uri(img_field.url)
+            return img_field.url
+
+        if profile:
+            return {
+                'company_name': profile.company_name or None,
+                'company_moto': profile.company_moto or None,
+                'contact_person': profile.contact_person or None,
+                'contact_number': profile.contact_number or None,
+                'company_email': profile.company_email or None,
+                'website': profile.website or None,
+                'company_size': profile.company_size or None,
+                'address1': profile.address1 or None,
+                'address2': profile.address2 or None,
+                'about': profile.about or None,
+                'company_logo': logo_url(profile.company_logo),
+            }
+
+        # CompanyProfile not yet created — surface verification fields as fallback
+        return {
+            'company_name': obj.legal_name or None,
+            'company_moto': None,
+            'contact_person': None,
+            'contact_number': obj.phone_number or None,
+            'company_email': obj.official_email or None,
+            'website': obj.website_url or None,
+            'company_size': None,
+            'address1': None,
+            'address2': None,
+            'about': None,
+            'company_logo': None,
+        }
+
+    def get_verification_details(self, obj):
+        request = self.context.get('request')
+
+        def file_url(file_field):
+            if not file_field:
+                return None
+            if request:
+                return request.build_absolute_uri(file_field.url)
+            return file_field.url
+
+        return {
+            'legal_name': obj.legal_name,
+            'registration_number': obj.registration_number,
+            'tax_id': obj.tax_id,
+            'website_url': obj.website_url,
+            'official_email': obj.official_email,
+            'phone_number': obj.phone_number,
+            'incorporation_certificate': file_url(obj.incorporation_certificate),
+            'submitted_by': obj.employer.username,
+            'date': obj.created_at.strftime("%d %B %Y"),
+            'certificate': "Yes" if obj.incorporation_certificate else "No",
+            'verification': obj.status,
+            'email_verified': getattr(obj.employer, 'email_verified', False),
+            'mobile_verified': getattr(obj.employer, 'mobile_verified', False),
+        }
 
 
 #UserManagement Serializers
