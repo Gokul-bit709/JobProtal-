@@ -18,6 +18,8 @@ from .views import (
     AdminLoginView,
     AdminTrustedDeviceListView,
     AdminUpdateComplaintView,
+    AdminComplaintDetailView,
+    AdminJobDetailView,
     ApplicationFlagReadStatusView,
     CompanyProfileCreateView,
     DashboardView,
@@ -41,8 +43,6 @@ from .views import (
     AdminCompanyDetailView,
     AdminProfilePhotoView,
     UserListView,
-    UserDetailView,
-    UserDeleteView,
     UserSettingsView,
     SaveJobView,
     JobApplicationDetailView,
@@ -257,6 +257,8 @@ urlpatterns = [
     path('complaints/submit/', SubmitComplaintView.as_view(), name='submit-complaint'),
     path('admin/complaints/', AdminComplaintListView.as_view(), name='admin-complaint-list'),
     path('admin/complaints/<int:pk>/', AdminUpdateComplaintView.as_view(), name='admin-complaint-update'),
+    path('admin/complaints/<int:pk>/detail/', AdminComplaintDetailView.as_view(), name='admin-complaint-detail'),
+    path('admin/jobs/<int:pk>/detail/', AdminJobDetailView.as_view(), name='admin-job-detail'),
 
     # Billing
     path("plans/", PlanListView.as_view(), name='plan-list'),
@@ -287,9 +289,7 @@ urlpatterns = [
     path('admin/profile/photo/', AdminProfilePhotoView.as_view(), name='admin-profile-photo'),
     #UserManagement
     path('users/', UserListView.as_view(), name='user-list'),
-    path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
     path('users/<int:pk>/status/', UserStatusUpdateView.as_view(), name='user-status-update'),
-    path('users/<int:pk>/delete/', UserDeleteView.as_view(), name='user-delete'),
     path('users/stats/', UserStatsView.as_view(), name='user-stats'),
     # #admin dashboard
     # path('admin/dashboard/', AdminDashboardStats.as_view()),
@@ -374,4 +374,3 @@ urlpatterns = [
     path("highlighted-jobs/", HighlightedJobsView.as_view(), name="highlighted-jobs" ),
  
 ]
-

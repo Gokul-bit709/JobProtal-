@@ -3246,6 +3246,10 @@ class ComplaintSerializer(
     source='reported_job.id',
     read_only=True
 )
+    JobId = serializers.IntegerField(
+    source='reported_job.id',
+    read_only=True
+)
     date = serializers.SerializerMethodField()
  
     status = serializers.SerializerMethodField()
@@ -3264,6 +3268,7 @@ class ComplaintSerializer(
             'id',
             'RepId',
             'jobId',
+            'JobId',
             'firstName',
             'lastName',
             'mobile',
@@ -3516,10 +3521,30 @@ class UserListSerializer(serializers.ModelSerializer):
     contact = serializers.SerializerMethodField()
     joinDate = serializers.SerializerMethodField()
     lastseen = serializers.SerializerMethodField()
- 
+
     class Meta:
         model = User
-        fields = ['id', 'role', 'status', 'joinDate', 'profile', 'contact', 'lastseen']
+        fields = ['id', 'role', 'status', 'joinDate', 'lastseen', 'profile', 'contact']
+
+    def get_lastseen(self, obj):
+        if not obj.last_seen:
+            return "N/A"
+        now = timezone.now()
+        diff = now - obj.last_seen
+        seconds = diff.total_seconds()
+        if seconds < 60:
+            return "Active Now"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            return f"{minutes} min{'s' if minutes > 1 else ''} ago"
+        elif seconds < 86400:
+            hours = int(seconds // 3600)
+            return f"{hours} hour{'s' if hours > 1 else ''} ago"
+        elif seconds < 604800:
+            days = int(seconds // 86400)
+            return f"{days} day{'s' if days > 1 else ''} ago"
+        else:
+            return obj.last_seen.strftime("%b %d, %Y")
  
     def get_role(self, obj):
         if obj.user_type == User.UserType.EMPLOYER:
@@ -3560,56 +3585,60 @@ class UserListSerializer(serializers.ModelSerializer):
  
     def get_joinDate(self, obj):
         if obj.date_joined:
-            return obj.date_joined.strftime("%b %d, %Y")
+            return obj.date_joined.strftime("%b %d, %Y")  # e.g., "Jan 10, 2024"
         return None
-
-    def get_lastseen(self, obj):
-        if not obj.last_seen:
-            return "N/A"
-        now = timezone.now()
-        diff = now - obj.last_seen
-        total_seconds = int(diff.total_seconds())
-        if total_seconds < 60:
-            return "Active Now"
-        elif total_seconds < 3600:
-            mins = total_seconds // 60
-            return f"{mins} min{'s' if mins > 1 else ''} ago"
-        elif total_seconds < 86400:
-            hours = total_seconds // 3600
-            return f"{hours} hour{'s' if hours > 1 else ''} ago"
-        elif total_seconds < 604800:
-            days = total_seconds // 86400
-            return f"{days} day{'s' if days > 1 else ''} ago"
-        else:
-            return obj.last_seen.strftime("%b %d, %Y")
-
+ 
+ 
 
 class UserDetailSerializer(serializers.ModelSerializer):
-    """Full detail serializer for GET /users/<pk>/"""
+    """
+    Full detail serializer for GET /users/<pk>/
+    Returns all fields the View Details page needs.
+    """
     role = serializers.SerializerMethodField()
     profile = serializers.SerializerMethodField()
     contact = serializers.SerializerMethodField()
     joinDate = serializers.SerializerMethodField()
     lastseen = serializers.SerializerMethodField()
-    skills = serializers.SerializerMethodField()
-    education = serializers.SerializerMethodField()
+    companyDetails = serializers.SerializerMethodField()
     preferences = serializers.SerializerMethodField()
     currentDetails = serializers.SerializerMethodField()
-    companyDetails = serializers.SerializerMethodField()
+    education = serializers.SerializerMethodField()
+    skills = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             'id', 'role', 'status', 'joinDate', 'lastseen',
             'profile', 'contact',
-            'skills', 'education', 'preferences', 'currentDetails',
-            'companyDetails',
+            'companyDetails', 'preferences', 'currentDetails',
+            'education', 'skills',
         ]
 
     def get_role(self, obj):
         if obj.user_type == User.UserType.EMPLOYER:
             return "employer"
         return "candidate"
+
+    def get_lastseen(self, obj):
+        if not obj.last_seen:
+            return "N/A"
+        now = timezone.now()
+        diff = now - obj.last_seen
+        seconds = diff.total_seconds()
+        if seconds < 60:
+            return "Active Now"
+        elif seconds < 3600:
+            minutes = int(seconds // 60)
+            return f"{minutes} min{'s' if minutes > 1 else ''} ago"
+        elif seconds < 86400:
+            hours = int(seconds // 3600)
+            return f"{hours} hour{'s' if hours > 1 else ''} ago"
+        elif seconds < 604800:
+            days = int(seconds // 86400)
+            return f"{days} day{'s' if days > 1 else ''} ago"
+        else:
+            return obj.last_seen.strftime("%b %d, %Y")
 
     def get_profile(self, obj):
         full_name = ""
@@ -3629,107 +3658,74 @@ class UserDetailSerializer(serializers.ModelSerializer):
 
     def get_contact(self, obj):
         mobile = ""
-        city = ""
         if obj.user_type == User.UserType.JOBSEEKER:
             try:
-                p = obj.jobseeker_profile
-                mobile = p.alternate_phone or ""
-                city = p.city or ""
+                mobile = obj.jobseeker_profile.mobile or ""
             except JobSeekerProfile.DoesNotExist:
                 pass
-        return {"email": obj.email, "mobile": mobile, "city": city}
+        elif obj.user_type == User.UserType.EMPLOYER:
+            try:
+                mobile = obj.employer_profile.mobile or ""
+            except EmployerProfile.DoesNotExist:
+                pass
+        return {"email": obj.email, "mobile": mobile}
 
     def get_joinDate(self, obj):
         if obj.date_joined:
             return obj.date_joined.strftime("%b %d, %Y")
         return None
 
-    def get_lastseen(self, obj):
-        if not obj.last_seen:
-            return "N/A"
-        now = timezone.now()
-        diff = now - obj.last_seen
-        total_seconds = int(diff.total_seconds())
-        if total_seconds < 60:
-            return "Active Now"
-        elif total_seconds < 3600:
-            mins = total_seconds // 60
-            return f"{mins} min{'s' if mins > 1 else ''} ago"
-        elif total_seconds < 86400:
-            hours = total_seconds // 3600
-            return f"{hours} hour{'s' if hours > 1 else ''} ago"
-        elif total_seconds < 604800:
-            days = total_seconds // 86400
-            return f"{days} day{'s' if days > 1 else ''} ago"
-        else:
-            return obj.last_seen.strftime("%b %d, %Y")
-
-    def get_skills(self, obj):
-        if obj.user_type != User.UserType.JOBSEEKER:
-            return []
+    def get_companyDetails(self, obj):
+        if obj.user_type != User.UserType.EMPLOYER:
+            return None
         try:
-            return list(obj.jobseeker_profile.skills.values_list('name', flat=True))
-        except JobSeekerProfile.DoesNotExist:
-            return []
-
-    def get_education(self, obj):
-        if obj.user_type != User.UserType.JOBSEEKER:
-            return {}
-        try:
-            p = obj.jobseeker_profile
-            edu = p.educations.order_by('-id').first()
-            if edu:
-                qual = edu.qualification_level or ""
-                if edu.degree:
-                    qual = f"{qual} / {edu.degree}"
-                if edu.department:
-                    qual = f"{qual} / {edu.department}"
-                return {"highestQual": qual}
-            return {"highestQual": ""}
-        except JobSeekerProfile.DoesNotExist:
-            return {}
+            ep = obj.employer_profile
+            cv = CompanyVerification.objects.filter(employer=obj).first()
+            return {
+                "companyName": ep.company_name or "",
+                "companyId": cv.id if cv else None,
+                "planName": "Free Plan",
+                "planLevel": "1",
+            }
+        except EmployerProfile.DoesNotExist:
+            return None
 
     def get_preferences(self, obj):
         if obj.user_type != User.UserType.JOBSEEKER:
-            return []
+            return None
         try:
-            p = obj.jobseeker_profile
-            return [{"role": p.preferred_role_industry or "Candidate"}]
+            role = obj.jobseeker_profile.preferred_role or ""
+            return [{"role": role}] if role else []
         except JobSeekerProfile.DoesNotExist:
             return []
 
     def get_currentDetails(self, obj):
         if obj.user_type != User.UserType.JOBSEEKER:
-            return {}
+            return None
         try:
-            p = obj.jobseeker_profile
-            return {
-                "currentLocation": p.current_location or "",
-                "currentJobTitle": p.current_job_title or "",
-                "currentCompany": p.current_company or "",
-                "totalExperience": str(p.total_experience_years or ""),
-                "noticePeriod": p.notice_period or "",
-            }
+            jp = obj.jobseeker_profile
+            return {"currentLocation": getattr(jp, "city", "") or getattr(jp, "location", "") or ""}
         except JobSeekerProfile.DoesNotExist:
-            return {}
+            return None
 
-    def get_companyDetails(self, obj):
-        if obj.user_type != User.UserType.EMPLOYER:
-            return {}
+    def get_education(self, obj):
+        if obj.user_type != User.UserType.JOBSEEKER:
+            return None
         try:
-            ep = obj.employer_profile
-            company = ep.company
-            if not company:
-                return {}
-            return {
-                "companyName": company.company_name or "",
-                "companyId": ep.employee_id or "",
-                "planName": "Free Plan",
-                "planLevel": "1",
-            }
-        except EmployerProfile.DoesNotExist:
-            return {}
+            entry = obj.education_entries.order_by("-end_year").first()
+            if entry:
+                return {"highestQual": getattr(entry, "degree", "") or getattr(entry, "qualification", "") or ""}
+            return {"highestQual": ""}
+        except Exception:
+            return {"highestQual": ""}
 
+    def get_skills(self, obj):
+        if obj.user_type != User.UserType.JOBSEEKER:
+            return None
+        try:
+            return list(obj.skills.values_list("name", flat=True))
+        except Exception:
+            return []
 
 class UserStatusUpdateSerializer(serializers.ModelSerializer):
  

@@ -60,7 +60,6 @@ from .serializers import (
     AdminCompanyDetailSerializer,
     AdminProfilePhotoSerializer,
     SaveDeviceTokenSerializer,
-    UserDetailSerializer,
 
 
 
@@ -3534,8 +3533,53 @@ class AdminUpdateComplaintView(APIView):
             {"message": "Report deleted successfully."},
             status=status.HTTP_200_OK
         )
+
+
+class AdminComplaintDetailView(APIView):
+    """
+    GET /admin/complaints/<pk>/
+    Returns full complaint details for the View Details modal.
+    """
+    # permission_classes = [IsAuthenticated, IsAdminUserType]
+
+    def get(self, request, pk):
+        try:
+            complaint = Complaint.objects.select_related(
+                'reported_job',
+                'user',
+            ).get(id=pk)
+        except Complaint.DoesNotExist:
+            return Response(
+                {"error": "Complaint not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = ComplaintSerializer(complaint, context={'request': request})
+        return Response(serializer.data)
+
+
+class AdminJobDetailView(APIView):
+    """
+    GET /admin/jobs/<pk>/
+    Returns full job details for the JobMonitorOverview (View this Job).
+    """
+    # permission_classes = [IsAuthenticated, IsAdminUserType]
+
+    def get(self, request, pk):
+        try:
+            job = PostAJob.objects.select_related(
+                'employer',
+                'employer__employer_profile',
+                'employer__employer_profile__company',
+            ).prefetch_related('applications').get(id=pk)
+        except PostAJob.DoesNotExist:
+            return Response(
+                {"error": "Job not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = AdminJobSerializer(job, context={'request': request})
+        return Response(serializer.data)
+
  
-    
 # ============ BILLING VIEWS ============
 
 from rest_framework.permissions import IsAuthenticated
@@ -4631,40 +4675,6 @@ class UserStatusUpdateView(APIView):
        
  
  
-
-class UserDetailView(APIView):
-    """GET /users/<pk>/ — returns full user details for the View Details panel"""
-    #permission_classes = [IsAuthenticated, IsAdminUserType]
-
-    def get(self, request, pk):
-        user = get_object_or_404(
-            User.objects.select_related(
-                'jobseeker_profile',
-                'employer_profile',
-                'employer_profile__company',
-            ).prefetch_related(
-                'jobseeker_profile__skills',
-                'jobseeker_profile__educations',
-            ),
-            pk=pk
-        )
-        serializer = UserDetailSerializer(user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-class UserDeleteView(APIView):
-    """DELETE /users/<pk>/delete/ — hard-deletes a user"""
-    #permission_classes = [IsAuthenticated, IsAdminUserType]
-
-    def delete(self, request, pk):
-        user = get_object_or_404(User, pk=pk)
-        user.delete()
-        return Response(
-            {"message": "User deleted successfully.", "id": pk},
-            status=status.HTTP_200_OK
-        )
-
-
 class UserStatsView(APIView):
    
     #permission_classes = [IsAuthenticated, IsAdminUserType]
@@ -8036,4 +8046,3 @@ class HighlightedJobsView(APIView):
         )
  
         return Response(serializer.data)
- 
