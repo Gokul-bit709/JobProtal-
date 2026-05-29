@@ -60,6 +60,7 @@ from .serializers import (
     AdminCompanyDetailSerializer,
     AdminProfilePhotoSerializer,
     SaveDeviceTokenSerializer,
+    UserDetailSerializer,
 
 
 
@@ -3517,6 +3518,22 @@ class AdminUpdateComplaintView(APIView):
             }
  
         }, status=200)
+
+    def delete(self, request, pk):
+        try:
+            complaint = Complaint.objects.get(id=pk)
+        except Complaint.DoesNotExist:
+            return Response(
+                {"error": "Complaint not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        complaint.delete()
+
+        return Response(
+            {"message": "Report deleted successfully."},
+            status=status.HTTP_200_OK
+        )
  
     
 # ============ BILLING VIEWS ============
@@ -4614,6 +4631,40 @@ class UserStatusUpdateView(APIView):
        
  
  
+
+class UserDetailView(APIView):
+    """GET /users/<pk>/ — returns full user details for the View Details panel"""
+    #permission_classes = [IsAuthenticated, IsAdminUserType]
+
+    def get(self, request, pk):
+        user = get_object_or_404(
+            User.objects.select_related(
+                'jobseeker_profile',
+                'employer_profile',
+                'employer_profile__company',
+            ).prefetch_related(
+                'jobseeker_profile__skills',
+                'jobseeker_profile__educations',
+            ),
+            pk=pk
+        )
+        serializer = UserDetailSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UserDeleteView(APIView):
+    """DELETE /users/<pk>/delete/ — hard-deletes a user"""
+    #permission_classes = [IsAuthenticated, IsAdminUserType]
+
+    def delete(self, request, pk):
+        user = get_object_or_404(User, pk=pk)
+        user.delete()
+        return Response(
+            {"message": "User deleted successfully.", "id": pk},
+            status=status.HTTP_200_OK
+        )
+
+
 class UserStatsView(APIView):
    
     #permission_classes = [IsAuthenticated, IsAdminUserType]
@@ -7985,3 +8036,4 @@ class HighlightedJobsView(APIView):
         )
  
         return Response(serializer.data)
+ 

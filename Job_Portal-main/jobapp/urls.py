@@ -41,6 +41,8 @@ from .views import (
     AdminCompanyDetailView,
     AdminProfilePhotoView,
     UserListView,
+    UserDetailView,
+    UserDeleteView,
     UserSettingsView,
     SaveJobView,
     JobApplicationDetailView,
@@ -282,13 +284,12 @@ urlpatterns = [
     path('company/', AdminCompanyListView.as_view(), name='dashboardlist'),
     path('company/<int:pk>/', AdminCompanyDetailView.as_view(), name='company-detail'),
     path('company/<int:pk>/status/', UpdateCompanyStatusView.as_view(), name='update-company-status'),
-
-    #AdminHeader
     path('admin/profile/photo/', AdminProfilePhotoView.as_view(), name='admin-profile-photo'),
-    
     #UserManagement
     path('users/', UserListView.as_view(), name='user-list'),
+    path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
     path('users/<int:pk>/status/', UserStatusUpdateView.as_view(), name='user-status-update'),
+    path('users/<int:pk>/delete/', UserDeleteView.as_view(), name='user-delete'),
     path('users/stats/', UserStatsView.as_view(), name='user-stats'),
     # #admin dashboard
     # path('admin/dashboard/', AdminDashboardStats.as_view()),
@@ -373,3 +374,4 @@ urlpatterns = [
     path("highlighted-jobs/", HighlightedJobsView.as_view(), name="highlighted-jobs" ),
  
 ]
+
