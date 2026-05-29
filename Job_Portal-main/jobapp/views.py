@@ -14,7 +14,25 @@ from django.db import IntegrityError
 from django.db.models import Q, Count
 from datetime import timedelta
 import logging
-
+import razorpay
+import random
+from django.conf import settings
+#for admin overview
+from datetime import timedelta
+ 
+from django.utils import timezone
+ 
+from django.db.models import (
+    Count,
+    Sum,
+    Q,
+    DecimalField,
+)
+ 
+from django.db.models.functions import (
+    TruncMonth,
+    Coalesce
+)
 
 from .serializers import (
     JobSeekerRegistrationSerializer,
@@ -76,10 +94,15 @@ from .models import (
 )
 from .permissions import IsAdminOrEmployer, IsEmployerOrAdmin, IsJobSeeker, IsAdminUserType
 from .utils import generate_otp, generate_4digit_otp, send_email_otp, generate_token, send_password_reset_email,generate_company_otp, send_company_email_otp,run_application_flag_checks
-from .services import NotificationService
-User = get_user_model()
 logger = logging.getLogger(__name__)
+from .services import NotificationService
 
+# Initialize Razorpay client
+client = razorpay.Client(
+    auth=(settings.RAZORPAY_KEY, settings.RAZORPAY_SECRET)
+)
+
+# ============ REGISTRATION VIEWS ============
 
 # ============ REGISTRATION VIEWS ============
 
@@ -7319,6 +7342,25 @@ class JobseekerPlatformSettingsView(APIView):
             status=status.HTTP_200_OK
         )
     
+
+def _month_label(date_obj):
+    """Format month for display"""
+    if date_obj:
+        return date_obj.strftime("%b %Y")
+    return "—"
+
+
+def _trend(current, previous):
+    """Calculate percentage trend"""
+    if previous == 0:
+        return 0 if current == 0 else 100
+    return round(((current - previous) / previous) * 100, 1)
+
+
+def _is_up(current, previous):
+    """Check if trend is positive"""
+    return current >= previous
+
 
 class AdminDashboardOverviewNewView(APIView):
  
