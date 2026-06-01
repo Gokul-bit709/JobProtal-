@@ -2636,17 +2636,128 @@ class AdminCreatePasswordTokenView(APIView):
        
 
 # ============ CONTACT US ============
-
+ 
 class ContactMessageCreateAPIView(APIView):
+ 
+    permission_classes = [AllowAny]
+ 
     def post(self, request):
-        serializer = ContactMessageSerializer(data=request.data)
+ 
+        data = request.data.copy()
+ 
+        user = None
+ 
+        # Logged-in user
+        if request.user.is_authenticated:
+ 
+            user = request.user
+ 
+            data["name"] = (
+                request.user.get_full_name()
+                or request.user.username
+            )
+ 
+            data["email"] = request.user.email
+ 
+        serializer = ContactMessageSerializer(data=data)
+ 
         if serializer.is_valid():
-            serializer.save()
+ 
+            serializer.save(user=user)
+ 
             return Response(
-                {"message": "Message sent successfully"},
+                {
+                    "status": True,
+                    "message": "Message sent successfully",
+                    "data": serializer.data
+                },
                 status=status.HTTP_201_CREATED
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+ 
+        return Response(
+            {
+                "status": False,
+                "errors": serializer.errors
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+   
+#for get by admin
+class ContactMessageListAPIView(APIView):
+ 
+    #permission_classes = [IsAuthenticated, IsAdminUserType]
+ 
+    def get(self, request):
+ 
+        messages = ContactMessage.objects.all().order_by("-created_at")
+ 
+        serializer = ContactMessageSerializer(
+            messages,
+            many=True
+        )
+ 
+        return Response(
+            {
+                "status": True,
+                "count": messages.count(),
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+#for admin update status only
+class ContactMessageStatusUpdateAPIView(APIView):
+ 
+    #permission_classes = [IsAuthenticated,IsAdminUserType]
+ 
+    def patch(self, request, pk):
+ 
+        try:
+ 
+            message = ContactMessage.objects.get(id=pk)
+ 
+        except ContactMessage.DoesNotExist:
+ 
+            return Response(
+                {
+                    "status": False,
+                    "message": "Contact message not found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+ 
+        status_value = request.data.get("status")
+ 
+        valid_status = [
+            choice[0]
+            for choice in ContactMessage.Status.choices
+        ]
+ 
+        if status_value not in valid_status:
+ 
+            return Response(
+                {
+                    "status": False,
+                    "message": f"Invalid status. Allowed values: {valid_status}"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+ 
+        message.status = status_value
+        message.save()
+ 
+        serializer = ContactMessageSerializer(message)
+ 
+        return Response(
+            {
+                "status": True,
+                "message": "Status updated successfully",
+                "data": serializer.data
+            },
+            status=status.HTTP_200_OK
+        )
+               
+ 
+ 
                
 
 # ============ NEWSLETTER ============

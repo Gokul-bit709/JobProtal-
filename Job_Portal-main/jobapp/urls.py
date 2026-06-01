@@ -22,6 +22,7 @@ from .views import (
     AdminJobDetailView,
     ApplicationFlagReadStatusView,
     CompanyProfileCreateView,
+    ContactMessageStatusUpdateAPIView,
     DashboardView,
     DisableAdmin2FAView,
     HighlightedJobsView,
@@ -122,7 +123,8 @@ from .views import (
     EmployerWeeklySummaryView,
     RegisterDeviceTokenView,
     JobseekerPlatformSettingsView,
-    SimilarJobsAPIView
+    SimilarJobsAPIView,
+    ContactMessageListAPIView,
     
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
@@ -214,8 +216,12 @@ urlpatterns = [
     # raise ticket
     path('raise-ticket/', RaiseTicketCreateView.as_view(), name='raise-ticket'),
     
-    # contact 
-    path('contact/', ContactMessageCreateAPIView.as_view(), name='contact-message'),
+    # contact  create
+    path( "contact/create/", ContactMessageCreateAPIView.as_view(), name="contact-create" ),
+        #contact list
+    path("contact/list/",ContactMessageListAPIView.as_view(),name="contact-list" ),
+     #contact update
+    path("contact/update/<int:pk>/",ContactMessageStatusUpdateAPIView.as_view(),name="contact-update"),
     
     # newsletter subscribe
     path("subscribe/", NewsletterSubscribeAPIView.as_view(), name="subscribe-newsletter"),
@@ -262,7 +268,7 @@ urlpatterns = [
 
     # Billing
     path("plans/", PlanListView.as_view(), name='plan-list'),
-     path('plans/create/', CreatePlanView.as_view(), name='create-plan'), #newly change 14/05
+    path('plans/create/', CreatePlanView.as_view(), name='create-plan'), #newly change 14/05
     path("create-order/", CreateOrderView.as_view(), name='create-order'),
     path("subscription/", CurrentSubscriptionView.as_view(), name='current-subscription'),
     path("cancel/", CancelSubscriptionView.as_view(), name='cancel-subscription'),
