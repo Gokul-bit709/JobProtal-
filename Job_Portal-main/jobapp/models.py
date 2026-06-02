@@ -1647,7 +1647,7 @@ class Subscription(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.end_date:
-            self.end_date = now() + timedelta(days=self.plan.duration_days)
+            self.end_date = timezone.now() + timedelta(days=self.plan.duration_days)
         super().save(*args, **kwargs)
 
 
