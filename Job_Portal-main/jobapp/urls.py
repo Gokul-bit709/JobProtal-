@@ -37,6 +37,7 @@ from .views import (
     DeleteNotificationView,
     ClearAllNotificationsView,
     NewsletterSubscribeAPIView,
+    PlanListCreateView,
     RevokeTrustedDeviceView,
     SendAdmin2FAOTPView,
     SubmitComplaintView,
@@ -125,7 +126,8 @@ from .views import (
     JobseekerPlatformSettingsView,
     SimilarJobsAPIView,
     ContactMessageListAPIView,
-    
+    PlanDetailView,
+    PlanPublishToggleView,    
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
 )
@@ -378,5 +380,10 @@ urlpatterns = [
 
     #for jobhighlights
     path("highlighted-jobs/", HighlightedJobsView.as_view(), name="highlighted-jobs" ),
+    # ... your existing urls ...
+ 
+    path('plans/', PlanListCreateView.as_view(), name='plan-list-create'),
+    path('plans/<int:pk>/', PlanDetailView.as_view(), name='plan-detail'),
+    path('plans/<int:pk>/toggle-publish/', PlanPublishToggleView.as_view(), name='plan-toggle-publish'),
  
 ]

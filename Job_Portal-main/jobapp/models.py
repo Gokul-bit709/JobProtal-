@@ -1574,15 +1574,59 @@ class Complaint(models.Model):
 
 # Billing
 
-from django.contrib.auth import get_user_model
+class PlanFeature(models.Model):
+    plan  = models.ForeignKey(
+        'Plan',
+        on_delete=models.CASCADE,
+        related_name='features'
+    )
+    text  = models.CharField(max_length=200)
+    value = models.CharField(max_length=100)
+    order = models.PositiveSmallIntegerField(default=0)
 
-User = get_user_model()
-from django.utils.timezone import now
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.plan.name} → {self.text}: {self.value}"
+
 
 class Plan(models.Model):
-    name = models.CharField(max_length=50)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
+    # Basic
+    name       = models.CharField(max_length=100, unique=True)
+    summary    = models.CharField(max_length=255, blank=True)
+    color      = models.CharField(max_length=30, default='#1E88E5')
+    is_published = models.BooleanField(default=True)
+
+    # Pricing
+    price             = models.DecimalField(max_digits=10, decimal_places=2)
+    tax               = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    discount_halfyear = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    discount_annual   = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+
+    # Duration (your existing field — kept as is)
     duration_days = models.IntegerField(default=30)
+
+    # Trial
+    is_trial_enabled = models.BooleanField(default=False)
+    trial_duration   = models.PositiveIntegerField(default=0)
+
+    # Advanced
+    is_auto_renewal = models.BooleanField(default=False)
+    grace_time      = models.PositiveIntegerField(default=0)
+
+    # Audit
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['id']
+
+    @property
+    def total_payable(self):
+        base = float(self.price)
+        tax  = float(self.tax)
+        return round(base + base * (tax / 100), 2)
 
     def __str__(self):
         return self.name

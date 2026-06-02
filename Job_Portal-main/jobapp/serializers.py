@@ -4,7 +4,7 @@ from drf_writable_nested.serializers import WritableNestedModelSerializer
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from .models import (
-      User, JobSeekerProfile, EmployerProfile, AdminProfile,
+        User, JobSeekerProfile, EmployerProfile, AdminProfile,
     EducationEntry, WorkExperienceEntry, Skill, LanguageKnown, Certification,
     PostAJob, JobApplication, SavedJob,
     NewsletterSubscriber, Notification, Conversation, Message, ContactMessage, 
@@ -12,6 +12,7 @@ from .models import (
     HelpTopic, RaiseTicket, PasswordResetToken, EmailOTP, ChatMessage, Plan, Subscription,
     Invoice, PaymentMethod,AdminAccessLog, AdminTrustedDevice, CompanyReview, UserDevice,
 )
+from .models import Plan, PlanFeature
 from .services import Admin2FAService , AdminSecurityService
  
 User = get_user_model()
@@ -3405,13 +3406,67 @@ class ComplaintSerializer(
    
  
     
-# Billing Serializer
+# serializers.py — replace your existing PlanSerializer with this
+
+
+class PlanFeatureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = PlanFeature
+        fields = ['id', 'text', 'value', 'order']
+
 
 class PlanSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Plan
-        fields = "__all__"
+    features         = PlanFeatureSerializer(many=True)
+    total_payable    = serializers.ReadOnlyField()
 
+    class Meta:
+        model  = Plan
+        fields = [
+            'id',
+            'name',
+            'summary',
+            'color',
+            'is_published',
+            'price',
+            'tax',
+            'discount_halfyear',
+            'discount_annual',
+            'duration_days',
+            'is_trial_enabled',
+            'trial_duration',
+            'is_auto_renewal',
+            'grace_time',
+            'features',
+            'total_payable',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def create(self, validated_data):
+        features_data = validated_data.pop('features', [])
+        plan = Plan.objects.create(**validated_data)
+        for idx, feature in enumerate(features_data):
+            feature.setdefault('order', idx)
+            PlanFeature.objects.create(plan=plan, **feature)
+        return plan
+
+    def update(self, instance, validated_data):
+        features_data = validated_data.pop('features', None)
+
+        # Update all scalar fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Full replace of features if provided
+        if features_data is not None:
+            instance.features.all().delete()
+            for idx, feature in enumerate(features_data):
+                feature.setdefault('order', idx)
+                PlanFeature.objects.create(plan=instance, **feature)
+
+        return instance
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     plan = PlanSerializer()
