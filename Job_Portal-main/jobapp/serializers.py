@@ -3416,14 +3416,20 @@ class PlanFeatureSerializer(serializers.ModelSerializer):
 
 
 class PlanSerializer(serializers.ModelSerializer):
-    features         = PlanFeatureSerializer(many=True)
+    # Rename backend fields to match frontend field names
+    PlanName         = serializers.CharField(source='name')
+    isTrialEnabled   = serializers.BooleanField(source='is_trial_enabled')
+    TrailDuration    = serializers.IntegerField(source='trial_duration')
+    isAutoRenewal    = serializers.BooleanField(source='is_auto_renewal')
+    GraceTime        = serializers.IntegerField(source='grace_time')
     total_payable    = serializers.ReadOnlyField()
+    features         = PlanFeatureSerializer(many=True)
 
     class Meta:
         model  = Plan
         fields = [
             'id',
-            'name',
+            'PlanName',           # → name
             'summary',
             'color',
             'is_published',
@@ -3432,10 +3438,10 @@ class PlanSerializer(serializers.ModelSerializer):
             'discount_halfyear',
             'discount_annual',
             'duration_days',
-            'is_trial_enabled',
-            'trial_duration',
-            'is_auto_renewal',
-            'grace_time',
+            'isTrialEnabled',     # → is_trial_enabled
+            'TrailDuration',      # → trial_duration
+            'isAutoRenewal',      # → is_auto_renewal
+            'GraceTime',          # → grace_time
             'features',
             'total_payable',
             'created_at',
@@ -3454,12 +3460,10 @@ class PlanSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         features_data = validated_data.pop('features', None)
 
-        # Update all scalar fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Full replace of features if provided
         if features_data is not None:
             instance.features.all().delete()
             for idx, feature in enumerate(features_data):

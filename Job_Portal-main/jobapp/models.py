@@ -2483,3 +2483,29 @@ class JobseekerPlatformSettings(models.Model):
         )
 
         return obj
+
+
+# models.py — add at the bottom
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+DEFAULT_FEATURES = [
+    { "text": "Jobs Posting",               "value": "1",     "order": 0 },
+    { "text": "Analytics",                  "value": "false", "order": 1 },
+    { "text": "Candidate Search",           "value": "false", "order": 2 },
+    { "text": "Highlight Your Job Listing", "value": "false", "order": 3 },
+    { "text": "Premium Support",            "value": "false", "order": 4 },
+    { "text": "Account Manager",            "value": "false", "order": 5 },
+]
+
+@receiver(post_save, sender=Plan)
+def create_default_features(sender, instance, created, **kwargs):
+    if created:  # only runs when a NEW plan is created
+        for feature in DEFAULT_FEATURES:
+            PlanFeature.objects.create(
+                plan=instance,
+                text=feature['text'],
+                value=feature['value'],
+                order=feature['order']
+            )
