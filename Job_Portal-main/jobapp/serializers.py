@@ -3414,63 +3414,501 @@ class PlanFeatureSerializer(serializers.ModelSerializer):
         model  = PlanFeature
         fields = ['id', 'text', 'value', 'order']
 
-
+ 
 class PlanSerializer(serializers.ModelSerializer):
-    # Rename backend fields to match frontend field names
-    PlanName         = serializers.CharField(source='name')
-    isTrialEnabled   = serializers.BooleanField(source='is_trial_enabled')
-    TrailDuration    = serializers.IntegerField(source='trial_duration')
-    isAutoRenewal    = serializers.BooleanField(source='is_auto_renewal')
-    GraceTime        = serializers.IntegerField(source='grace_time')
-    total_payable    = serializers.ReadOnlyField()
-    features         = PlanFeatureSerializer(many=True)
-
+ 
+    pricing = serializers.SerializerMethodField()
+ 
+    features = serializers.SerializerMethodField()
+ 
     class Meta:
-        model  = Plan
+ 
+        model = Plan
+ 
         fields = [
+ 
             'id',
-            'PlanName',           # → name
+ 
+            'name',
+ 
             'summary',
+ 
             'color',
+ 
             'is_published',
-            'price',
+ 
+            'monthly_price',
+ 
             'tax',
+ 
             'discount_halfyear',
+ 
             'discount_annual',
+ 
             'duration_days',
-            'isTrialEnabled',     # → is_trial_enabled
-            'TrailDuration',      # → trial_duration
-            'isAutoRenewal',      # → is_auto_renewal
-            'GraceTime',          # → grace_time
+ 
+            'is_trial_enabled',
+ 
+            'trial_duration',
+ 
+            'is_auto_renewal',
+ 
+            'grace_time',
+ 
             'features',
+ 
             'total_payable',
+ 
+            'pricing',
+ 
             'created_at',
+ 
             'updated_at',
         ]
-        read_only_fields = ['created_at', 'updated_at']
-
-    def create(self, validated_data):
-        features_data = validated_data.pop('features', [])
-        plan = Plan.objects.create(**validated_data)
-        for idx, feature in enumerate(features_data):
-            feature.setdefault('order', idx)
-            PlanFeature.objects.create(plan=plan, **feature)
-        return plan
-
-    def update(self, instance, validated_data):
-        features_data = validated_data.pop('features', None)
-
+ 
+        read_only_fields = [
+ 
+            'created_at',
+ 
+            'updated_at'
+        ]
+ 
+ 
+    # FEATURES
+   
+ 
+    def get_features(self, obj):
+ 
+        active_setting = (
+ 
+            EmployerPlatformSettings.objects.filter(
+ 
+                plan=obj,
+ 
+                account_status=
+                User.AccountStatus.ACTIVE
+ 
+            ).first()
+        )
+ 
+        return [
+ 
+            {
+ 
+                "text": "Jobs Posting",
+ 
+                "value": (
+ 
+                    str(
+                        active_setting.max_job_posts
+                    )
+ 
+                    if active_setting
+ 
+                    else "0"
+                ),
+ 
+                "order": 0
+            },
+ 
+            {
+ 
+                "text": "Analytics",
+ 
+                "value": str(
+                    obj.Analytics
+                ).lower(),
+ 
+                "order": 1
+            },
+ 
+            {
+ 
+                "text": "Candidate Search",
+ 
+                "value": str(
+                    obj.Candidate_Search
+                ).lower(),
+ 
+                "order": 2
+            },
+ 
+            {
+ 
+                "text": (
+                    "Highlight Your Job Listing"
+                ),
+ 
+                "value": (
+ 
+                    str(
+                        active_setting.featured_job_limit
+                    )
+ 
+                    if (
+ 
+                        active_setting
+ 
+                        and
+ 
+                        active_setting
+                        .featured_employer_option
+                    )
+ 
+                    else "false"
+                ),
+ 
+                "order": 3
+            },
+ 
+            {
+ 
+                "text": "Premium Support",
+ 
+                "value": str(
+                    obj.Premium_Support
+                ).lower(),
+ 
+                "order": 4
+            },
+ 
+            {
+ 
+                "text": "Account Manager",
+ 
+                "value": str(
+                    obj.Account_Manager
+                ).lower(),
+ 
+                "order": 5
+            },
+        ]
+ 
+   
+    # PRICING
+   
+ 
+    def get_pricing(self, obj):
+ 
+        monthly_price = float(
+            obj.monthly_price
+        )
+ 
+        tax_rate = (
+            float(obj.tax)
+            if obj.tax
+            else 18
+        )
+ 
+        cgst = round(
+ 
+            monthly_price *
+ 
+            (tax_rate / 2) / 100,
+ 
+            2
+        )
+ 
+        sgst = round(
+ 
+            monthly_price *
+ 
+            (tax_rate / 2) / 100,
+ 
+            2
+        )
+ 
+        total = round(
+ 
+            monthly_price +
+ 
+            cgst +
+ 
+            sgst,
+ 
+            2
+        )
+ 
+        discounted_price_6month = (
+ 
+            monthly_price *
+ 
+            (
+                1 -
+ 
+                float(
+                    obj.discount_halfyear
+                ) / 100
+            )
+ 
+            if obj.discount_halfyear
+ 
+            else monthly_price
+        )
+ 
+        discounted_price_annual = (
+ 
+            monthly_price *
+ 
+            (
+                1 -
+ 
+                float(
+                    obj.discount_annual
+                ) / 100
+            )
+ 
+            if obj.discount_annual
+ 
+            else monthly_price
+        )
+ 
+        return {
+ 
+            "duration": "Monthly",
+ 
+            "duration_days":
+                obj.duration_days,
+ 
+            "monthly_price":
+                monthly_price,
+ 
+            "original_price":
+                monthly_price,
+ 
+            "discount_percent":
+                0,
+ 
+            "discount_amount":
+                0.0,
+ 
+            "subtotal":
+                monthly_price,
+ 
+            "cgst":
+                cgst,
+ 
+            "sgst":
+                sgst,
+ 
+            "total":
+                total,
+ 
+            "savings":
+                None,
+ 
+            "discounted_prices": {
+ 
+                "half_yearly":
+                    discounted_price_6month,
+ 
+                "annual":
+                    discounted_price_annual
+            }
+        }
+ 
+ 
+    # CREATE
+   
+ 
+    def create(
+        self,
+        validated_data
+    ):
+ 
+        return Plan.objects.create(
+            **validated_data
+        )
+ 
+    # UPDATE
+   
+ 
+    def update(
+    self,
+    instance,
+    validated_data
+):
+ 
+        features_data = validated_data.pop(
+            'features',
+            None
+        )
+ 
+     
+       
+ 
         for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+ 
+            setattr(
+                instance,
+                attr,
+                value
+            )
+ 
+       
+        # FEATURES
+     
+ 
+        if features_data:
+ 
+            active_setting = (
+ 
+                EmployerPlatformSettings.objects.filter(
+ 
+                    plan=instance,
+ 
+                    account_status=
+                    User.AccountStatus.ACTIVE
+ 
+                ).first()
+            )
+ 
+            for feature in features_data:
+ 
+                text = feature.get(
+                    "text"
+                )
+ 
+                value = feature.get(
+                    "value"
+                )
+ 
+                # ─────────────────────
+                # EMPLOYER SETTINGS
+                # ─────────────────────
+ 
+                if (
+                    active_setting
+                    and
+                    text == "Jobs Posting"
+                ):
+ 
+                    active_setting.max_job_posts = (
+                        int(value)
+                    )
+ 
+                elif (
+                    active_setting
+                    and
+                    text ==
+                    "Highlight Your Job Listing"
+                ):
+ 
+                    if (
+                        str(value).lower()
+                        == "false"
+                    ):
+ 
+                        active_setting.featured_employer_option = False
+ 
+                        active_setting.featured_job_limit = 0
+ 
+                    else:
+ 
+                        active_setting.featured_employer_option = True
+ 
+                        active_setting.featured_job_limit = (
+                            int(value)
+                        )
+ 
+             
+                # PLAN TABLE
+             
+ 
+                elif text == "Analytics":
+ 
+                    instance.Analytics = (
+                        str(value).lower()
+                        == "true"
+                    )
+ 
+                elif text == "Candidate Search":
+ 
+                    instance.Candidate_Search = (
+                        str(value).lower()
+                        == "true"
+                    )
+ 
+                elif text == "Premium Support":
+ 
+                    instance.Premium_Support = (
+                        str(value).lower()
+                        == "true"
+                    )
+ 
+                elif text == "Account Manager":
+ 
+                    instance.Account_Manager = (
+                        str(value).lower()
+                        == "true"
+                    )
+ 
+            if active_setting:
+ 
+                active_setting.save()
+ 
         instance.save()
-
-        if features_data is not None:
-            instance.features.all().delete()
-            for idx, feature in enumerate(features_data):
-                feature.setdefault('order', idx)
-                PlanFeature.objects.create(plan=instance, **feature)
-
+ 
         return instance
+ 
+
+
+# class PlanSerializer(serializers.ModelSerializer):
+#     # Rename backend fields to match frontend field names
+#     PlanName         = serializers.CharField(source='name')
+#     isTrialEnabled   = serializers.BooleanField(source='is_trial_enabled')
+#     TrailDuration    = serializers.IntegerField(source='trial_duration')
+#     isAutoRenewal    = serializers.BooleanField(source='is_auto_renewal')
+#     GraceTime        = serializers.IntegerField(source='grace_time')
+#     total_payable    = serializers.ReadOnlyField()
+#     features         = PlanFeatureSerializer(many=True)
+
+#     class Meta:
+#         model  = Plan
+#         fields = [
+#             'id',
+#             'PlanName',           # → name
+#             'summary',
+#             'color',
+#             'is_published',
+#             'price',
+#             'tax',
+#             'discount_halfyear',
+#             'discount_annual',
+#             'duration_days',
+#             'isTrialEnabled',     # → is_trial_enabled
+#             'TrailDuration',      # → trial_duration
+#             'isAutoRenewal',      # → is_auto_renewal
+#             'GraceTime',          # → grace_time
+#             'features',
+#             'total_payable',
+#             'created_at',
+#             'updated_at',
+#         ]
+#         read_only_fields = ['created_at', 'updated_at']
+
+#     def create(self, validated_data):
+#         features_data = validated_data.pop('features', [])
+#         plan = Plan.objects.create(**validated_data)
+#         for idx, feature in enumerate(features_data):
+#             feature.setdefault('order', idx)
+#             PlanFeature.objects.create(plan=plan, **feature)
+#         return plan
+
+#     def update(self, instance, validated_data):
+#         features_data = validated_data.pop('features', None)
+
+#         for attr, value in validated_data.items():
+#             setattr(instance, attr, value)
+#         instance.save()
+
+#         if features_data is not None:
+#             instance.features.all().delete()
+#             for idx, feature in enumerate(features_data):
+#                 feature.setdefault('order', idx)
+#                 PlanFeature.objects.create(plan=instance, **feature)
+
+#         return instance
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     plan = PlanSerializer()

@@ -8249,7 +8249,7 @@ class PlanDetailView(APIView):
 
     def _get_plan(self, pk):
         try:
-            return Plan.objects.prefetch_related('featurerts').get(pk=pk)
+            return Plan.objects.get(pk=pk)
         except Plan.DoesNotExist:
             return None
 

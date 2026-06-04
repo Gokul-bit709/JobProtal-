@@ -269,7 +269,7 @@ urlpatterns = [
     path('admin/jobs/<int:pk>/detail/', AdminJobDetailView.as_view(), name='admin-job-detail'),
 
     # Billing
-    path("plans/", PlanListView.as_view(), name='plan-list'),
+    # path("plans/", PlanListView.as_view(), name='plan-list'),
     path('plans/create/', CreatePlanView.as_view(), name='create-plan'), #newly change 14/05
     path("create-order/", CreateOrderView.as_view(), name='create-order'),
     path("subscription/", CurrentSubscriptionView.as_view(), name='current-subscription'),
@@ -381,7 +381,11 @@ urlpatterns = [
     #for jobhighlights
     path("highlighted-jobs/", HighlightedJobsView.as_view(), name="highlighted-jobs" ),
     # ... your existing urls ...
- 
+
+
+
+    
+  # Plan management
     path('plans/', PlanListCreateView.as_view(), name='plan-list-create'),
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='plan-detail'),
     path('plans/<int:pk>/toggle-publish/', PlanPublishToggleView.as_view(), name='plan-toggle-publish'),

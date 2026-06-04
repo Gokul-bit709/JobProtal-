@@ -1597,6 +1597,11 @@ class Plan(models.Model):
     summary    = models.CharField(max_length=255, blank=True)
     color      = models.CharField(max_length=30, default='#1E88E5')
     is_published = models.BooleanField(default=True)
+    Analytics = models.BooleanField(default=False)
+    Candidate_Search = models.BooleanField(default=False)
+    Premium_Support = models.BooleanField(default=False)
+    Account_Manager = models.BooleanField(default=False)
+
 
     # Pricing
     price             = models.DecimalField(max_digits=10, decimal_places=2)
@@ -2509,3 +2514,5 @@ def create_default_features(sender, instance, created, **kwargs):
                 value=feature['value'],
                 order=feature['order']
             )
+
+
