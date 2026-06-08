@@ -8449,3 +8449,218 @@ class PlanPublishToggleView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+    
+
+
+
+# ============================================================
+#  BLOG VIEWS
+#  Append these classes to the bottom of your views.py
+# ============================================================
+
+from .models import BlogCategory, Blog, BlogPoint, PointContent
+from .serializers import BlogReadSerializer, BlogWriteSerializer, BlogCategorySerializer
+
+
+# ── /api/blogs/ ───────────────────────────────────────────────────────────────
+
+class BlogListCreateView(APIView):
+    """
+    GET  /api/blogs/
+        List all blogs.
+        Optional query params:
+            ?search=keyword   — filters by title OR category name
+            ?status=Published — filters by status (Published / Draft)
+
+    POST /api/blogs/
+        Create a new blog.
+        Accepts the BlogWriteSerializer shape (categoryName, title, Status, etc.)
+    """
+    permission_classes = [AllowAny]   # tighten to IsAdminUserType when ready
+
+    def get(self, request):
+        search   = request.query_params.get('search', '').strip()
+        status_f = request.query_params.get('status', '').strip()
+
+        blogs = Blog.objects.select_related('category').prefetch_related('points__content')
+
+        if search:
+            blogs = blogs.filter(
+                Q(title__icontains=search) | Q(category__name__icontains=search)
+            )
+        if status_f:
+            blogs = blogs.filter(status__iexact=status_f)
+
+        return Response(BlogReadSerializer(blogs, many=True).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = BlogWriteSerializer(data=request.data)
+        if serializer.is_valid():
+            blog = serializer.save()
+            return Response(BlogReadSerializer(blog).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ── /api/blogs/<pk>/ ─────────────────────────────────────────────────────────
+
+class BlogDetailView(APIView):
+    """
+    GET    /api/blogs/<pk>/   — retrieve single blog
+    PUT    /api/blogs/<pk>/   — full update  (called from handleSaveChanges)
+    PATCH  /api/blogs/<pk>/   — partial update
+    DELETE /api/blogs/<pk>/   — delete       (called from handleDelete)
+    """
+    permission_classes = [AllowAny]
+
+    def _get_blog(self, pk):
+        try:
+            return Blog.objects.select_related('category').prefetch_related('points__content').get(pk=pk)
+        except Blog.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        blog = self._get_blog(pk)
+        if not blog:
+            return Response({'error': 'Blog not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(BlogReadSerializer(blog).data)
+
+    def put(self, request, pk):
+        blog = self._get_blog(pk)
+        if not blog:
+            return Response({'error': 'Blog not found.'}, status=status.HTTP_404_NOT_FOUND)
+        s = BlogWriteSerializer(blog, data=request.data)
+        if s.is_valid():
+            return Response(BlogReadSerializer(s.save()).data)
+        return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk):
+        blog = self._get_blog(pk)
+        if not blog:
+            return Response({'error': 'Blog not found.'}, status=status.HTTP_404_NOT_FOUND)
+        s = BlogWriteSerializer(blog, data=request.data, partial=True)
+        if s.is_valid():
+            return Response(BlogReadSerializer(s.save()).data)
+        return Response(s.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk):
+        blog = self._get_blog(pk)
+        if not blog:
+            return Response({'error': 'Blog not found.'}, status=status.HTTP_404_NOT_FOUND)
+        blog.delete()
+        return Response({'message': 'Blog deleted successfully.'}, status=status.HTTP_200_OK)
+
+
+# ── /api/blogs/grouped/ ───────────────────────────────────────────────────────
+
+class BlogsGroupedView(APIView):
+    """
+    GET /api/blogs/grouped/
+    Returns blogs grouped by category name — exact match for publishedBlogs shape:
+    {
+        "Technology": [ {...blog}, ... ],
+        "Lifestyle":  [ {...blog} ]
+    }
+    Optional: ?search=keyword  filters by title or category
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        search = request.query_params.get('search', '').strip()
+        categories = BlogCategory.objects.prefetch_related('blogs__points__content')
+
+        if search:
+            categories = categories.filter(
+                Q(name__icontains=search) | Q(blogs__title__icontains=search)
+            ).distinct()
+
+        result = {}
+        for cat in categories:
+            blogs = cat.blogs.all()
+            if search:
+                blogs = blogs.filter(
+                    Q(title__icontains=search) | Q(category__name__icontains=search)
+                )
+            if blogs.exists():
+                result[cat.name] = BlogReadSerializer(blogs, many=True).data
+
+        return Response(result, status=status.HTTP_200_OK)
+
+
+# ── /api/blog-categories/ ────────────────────────────────────────────────────
+
+class BlogCategoryListCreateView(APIView):
+    """
+    GET  /api/blog-categories/   — list all categories
+    POST /api/blog-categories/   — create a category
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        cats = BlogCategory.objects.prefetch_related('blogs').all()
+        return Response(BlogCategorySerializer(cats, many=True).data)
+
+    def post(self, request):
+        name = request.data.get('name', '').strip()
+        if not name:
+            return Response({'error': 'Category name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if BlogCategory.objects.filter(name__iexact=name).exists():
+            return Response({'error': 'Category already exists.'}, status=status.HTTP_409_CONFLICT)
+        cat = BlogCategory.objects.create(name=name)
+        return Response(BlogCategorySerializer(cat).data, status=status.HTTP_201_CREATED)
+
+
+class BlogCategoryDetailView(APIView):
+    """
+    GET    /api/blog-categories/<pk>/   — retrieve + all its blogs
+    PATCH  /api/blog-categories/<pk>/   — rename
+    DELETE /api/blog-categories/<pk>/   — delete (cascades to all blogs)
+    """
+    permission_classes = [AllowAny]
+
+    def _get(self, pk):
+        try:
+            return BlogCategory.objects.prefetch_related('blogs__points__content').get(pk=pk)
+        except BlogCategory.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        cat = self._get(pk)
+        if not cat:
+            return Response({'error': 'Category not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(BlogCategorySerializer(cat).data)
+
+    def patch(self, request, pk):
+        cat = self._get(pk)
+        if not cat:
+            return Response({'error': 'Category not found.'}, status=status.HTTP_404_NOT_FOUND)
+        name = request.data.get('name', '').strip()
+        if not name:
+            return Response({'error': 'Name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        cat.name = name
+        cat.save()
+        return Response(BlogCategorySerializer(cat).data)
+
+    def delete(self, request, pk):
+        cat = self._get(pk)
+        if not cat:
+            return Response({'error': 'Category not found.'}, status=status.HTTP_404_NOT_FOUND)
+        cat.delete()
+        return Response({'message': 'Category and all its blogs deleted.'}, status=status.HTTP_200_OK)
+
+
+# ── /api/blog-stats/ ─────────────────────────────────────────────────────────
+
+class BlogStatsView(APIView):
+    """
+    GET /api/blog-stats/
+    Powers the 4 dashboard cards in AdminBlogPost:
+    { total, published, drafts }
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return Response({
+            'total':     Blog.objects.count(),
+            'published': Blog.objects.filter(status='Published').count(),
+            'drafts':    Blog.objects.filter(status='Draft').count(),
+        })

@@ -127,7 +127,13 @@ from .views import (
     SimilarJobsAPIView,
     ContactMessageListAPIView,
     PlanDetailView,
-    PlanPublishToggleView,    
+    PlanPublishToggleView,  
+    BlogListCreateView,
+    BlogDetailView,
+    BlogsGroupedView,
+    BlogCategoryListCreateView,
+    BlogCategoryDetailView,
+    BlogStatsView,  
 
     # REMOVED: Company-related view imports (CompanyListView, CompanyDetailView, etc.)
 )
@@ -384,10 +390,18 @@ urlpatterns = [
 
 
 
-    
+
   # Plan management
     path('plans/', PlanListCreateView.as_view(), name='plan-list-create'),
     path('plans/<int:pk>/', PlanDetailView.as_view(), name='plan-detail'),
     path('plans/<int:pk>/toggle-publish/', PlanPublishToggleView.as_view(), name='plan-toggle-publish'),
  
+    
+    path('blogs/', BlogListCreateView.as_view(), name='blog-list-create'),
+    path('blogs/grouped/', BlogsGroupedView.as_view(), name='blogs-grouped'),
+    path('blogs/<int:pk>/', BlogDetailView.as_view(), name='blog-detail'),
+    path('blog-categories/', BlogCategoryListCreateView.as_view(), name='blog-category-list-create'),
+    path('blog-categories/<int:pk>/', BlogCategoryDetailView.as_view(), name='blog-category-detail'),
+    path('blog-stats/', BlogStatsView.as_view(), name='blog-stats'),
+
 ]

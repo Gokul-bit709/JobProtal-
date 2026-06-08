@@ -2516,3 +2516,90 @@ def create_default_features(sender, instance, created, **kwargs):
             )
 
 
+
+
+
+
+# ============================================================
+#  BLOG MODELS
+#  Append these classes to the bottom of your models.py
+#  (above the signals section if present)
+# ============================================================
+
+class BlogCategory(models.Model):
+    """
+    Top-level blog category — mirrors the keys of publishedBlogs
+    in your React AdminBlogPost component.
+    """
+    name = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'blog_categories'
+        verbose_name_plural = 'Blog Categories'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class Blog(models.Model):
+    STATUS_CHOICES = [
+        ('Published', 'Published'),
+        ('Draft', 'Draft'),
+    ]
+
+    category = models.ForeignKey(
+        BlogCategory,
+        on_delete=models.CASCADE,
+        related_name='blogs'
+    )
+    title     = models.CharField(max_length=500)
+    heading   = models.CharField(max_length=500, blank=True, default='')
+    desc      = models.TextField(blank=True, default='')
+    thumbnail = models.URLField(max_length=1000, blank=True, default='')
+    status    = models.CharField(max_length=20, choices=STATUS_CHOICES, default='Draft')
+    # stored as string to match your existing React frontend field
+    date      = models.CharField(max_length=50, blank=True, default='')
+    time      = models.CharField(max_length=20, blank=True, default='12:00 PM')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'blogs'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.title
+
+
+class BlogPoint(models.Model):
+    """
+    A heading point inside a blog post — maps to blog.points[n].title
+    """
+    blog  = models.ForeignKey(Blog, on_delete=models.CASCADE, related_name='points')
+    title = models.CharField(max_length=500, blank=True, default='')
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'blog_points'
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.blog.title} — Point {self.order}"
+
+
+class PointContent(models.Model):
+    """
+    A content line under a BlogPoint — maps to blog.points[n].content[m]
+    """
+    point = models.ForeignKey(BlogPoint, on_delete=models.CASCADE, related_name='content')
+    text  = models.TextField(blank=True, default='')
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'point_contents'
+        ordering = ['order']
+
+    def __str__(self):
+        return f"Content[{self.order}] for Point {self.point.id}"
