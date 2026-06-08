@@ -2417,107 +2417,216 @@ class RaiseTicketCreateView(APIView):
 # ============ PASSWORD MANAGEMENT ============
 
 class ForgotPasswordView(APIView):
+
     permission_classes = [AllowAny]
  
     def post(self, request):
-        serializer = ForgotPasswordSerializer(data=request.data, context={'request': request})
-       
-        if serializer.is_valid():
-            user = serializer.context['user']
-           
-            PasswordResetToken.objects.filter(user=user, is_used=False).delete()
-                     
-            token = generate_token()
-            reset_token = PasswordResetToken.objects.create(
-                user=user,
-                token=token,
-                expires_at=timezone.now() + timedelta(hours=24)
-            )
-           
-            try:
-                send_password_reset_email(user, token, request)
-                return Response({
-                    "message": "Password reset instructions have been sent to your email."
-                }, status=status.HTTP_200_OK)
-            except Exception as e:
-                reset_token.delete()
-                return Response({
-                    "error": "Failed to send email. Please try again."
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-       
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = ForgotPasswordSerializer(
+
+            data=request.data,
+
+            context={'request': request}
+
+        )
  
+        if serializer.is_valid():
+
+            user = serializer.context['user']
+ 
+            # ALLOW ONLY JOBSEEKERS
+
+            if user.user_type != User.UserType.JOBSEEKER:
+
+                return Response(
+
+                    {
+
+                        "error": "Forgot password is available only for jobseekers."
+
+                    },
+
+                    status=status.HTTP_400_BAD_REQUEST
+
+                )
+ 
+            PasswordResetToken.objects.filter(
+
+                user=user,
+
+                is_used=False
+
+            ).delete()
+ 
+            token = generate_token()
+ 
+            reset_token = PasswordResetToken.objects.create(
+
+                user=user,
+
+                token=token,
+
+                expires_at=timezone.now() + timedelta(hours=24)
+
+            )
+ 
+            send_password_reset_email(user, token, request)
+ 
+            return Response(
+
+                {
+
+                    "message": "Password reset instructions have been sent."
+
+                },
+
+                status=status.HTTP_200_OK
+
+            )
+ 
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+  
 
 class ResetPasswordConfirmView(APIView):
+
     permission_classes = [AllowAny]
-
-    def post(self, request):
-        serializer = ResetPasswordConfirmSerializer(data=request.data)
-
-        if serializer.is_valid():
-            token = serializer.validated_data['token']
-            new_password = serializer.validated_data['new_password']
-
-            try:
-                reset_token = PasswordResetToken.objects.get(
-                    token=token,
-                    is_used=False
-                )
-
-                if not reset_token.is_valid():
-                    return Response({
-                        "error": "Token has expired."
-                    }, status=400)
-
-                user = reset_token.user
-
-                user.set_password(new_password)
-                user.is_active = True
-
-                if hasattr(user, "is_verified"):
-                    user.is_verified = True
-
-                user.save()
-#--------------------------------------------------------------------------------------------------
-                NotificationService.create_notification(
-
-    recipient=user,
-
-    title="Password Reset Successful",
-
-    message=(
-
-        "Your account password "
-
-        "has been reset successfully."
-    ),
-
-    category="security",
-
-    event_type="password_reset_success",
-
-    notification_type="system"
-)
-#--------------------------------------------------------------------------------------------------------
-
-                reset_token.is_used = True
-                reset_token.save()
-
-                refresh = RefreshToken.for_user(user)
-
-                return Response({
-                    "message": "Password has been reset successfully.",
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh)
-                }, status=200)
-
-            except PasswordResetToken.DoesNotExist:
-                return Response({
-                    "error": "Invalid or expired token."
-                }, status=400)
-
-        return Response(serializer.errors, status=400)
  
+    def post(self, request):
+
+        serializer = ResetPasswordConfirmSerializer(data=request.data)
+ 
+        if not serializer.is_valid():
+
+            return Response(
+
+                serializer.errors,
+
+                status=status.HTTP_400_BAD_REQUEST
+
+            )
+ 
+        token = serializer.validated_data["token"]
+
+        new_password = serializer.validated_data["new_password"]
+ 
+        try:
+
+            reset_token = PasswordResetToken.objects.get(
+
+                token=token,
+
+                is_used=False
+
+            )
+ 
+            # Check token validity
+
+            if not reset_token.is_valid():
+
+                return Response(
+
+                    {
+
+                        "error": "Token has expired."
+
+                    },
+
+                    status=status.HTTP_400_BAD_REQUEST
+
+                )
+ 
+            user = reset_token.user
+ 
+            # ALLOW ONLY JOBSEEKERS
+
+            if user.user_type != User.UserType.JOBSEEKER:
+
+                return Response(
+
+                    {
+
+                        "error": "Password reset is available only for jobseekers."
+
+                    },
+
+                    status=status.HTTP_400_BAD_REQUEST
+
+                )
+ 
+            # Update password
+
+            user.set_password(new_password)
+
+            user.password_changed_at = timezone.now()
+
+            user.save(
+
+                update_fields=[
+
+                    "password",
+
+                    "password_changed_at"
+
+                ]
+
+            )
+ 
+            # Mark token used
+
+            reset_token.is_used = True
+
+            reset_token.save(update_fields=["is_used"])
+ 
+            # Generate new JWT tokens
+
+            refresh = RefreshToken.for_user(user)
+ 
+            return Response(
+
+                {
+
+                    "message": "Password has been reset successfully.",
+
+                    "access": str(refresh.access_token),
+
+                    "refresh": str(refresh),
+
+                    "user_type": user.user_type
+
+                },
+
+                status=status.HTTP_200_OK
+
+            )
+ 
+        except PasswordResetToken.DoesNotExist:
+
+            return Response(
+
+                {
+
+                    "error": "Invalid or expired token."
+
+                },
+
+                status=status.HTTP_400_BAD_REQUEST
+
+            )
+ 
+        except Exception as e:
+
+            return Response(
+
+                {
+
+                    "error": str(e)
+
+                },
+
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+
+            )
+  
 
 class CreatePasswordView(APIView):
     permission_classes = [AllowAny]
