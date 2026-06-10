@@ -1,3 +1,4 @@
+from re import search
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -8452,10 +8453,9 @@ class PlanPublishToggleView(APIView):
     
 
 
-
 # ============================================================
-#  BLOG VIEWS
-#  Append these classes to the bottom of your views.py
+#  BLOG VIEWS — Replace the blog section in your views.py
+#  with this corrected version
 # ============================================================
 
 from .models import BlogCategory, Blog, BlogPoint, PointContent
@@ -8467,22 +8467,22 @@ from .serializers import BlogReadSerializer, BlogWriteSerializer, BlogCategorySe
 class BlogListCreateView(APIView):
     """
     GET  /api/blogs/
-        List all blogs.
+        List all blogs (excludes soft-deleted).
         Optional query params:
             ?search=keyword   — filters by title OR category name
             ?status=Published — filters by status (Published / Draft)
 
     POST /api/blogs/
         Create a new blog.
-        Accepts the BlogWriteSerializer shape (categoryName, title, Status, etc.)
     """
-    permission_classes = [AllowAny]   # tighten to IsAdminUserType when ready
+    permission_classes = [AllowAny]
 
     def get(self, request):
         search   = request.query_params.get('search', '').strip()
         status_f = request.query_params.get('status', '').strip()
 
-        blogs = Blog.objects.select_related('category').prefetch_related('points__content')
+        # Only show non-deleted blogs
+        blogs = Blog.objects.filter(is_deleted=False).select_related('category').prefetch_related('points__content')
 
         if search:
             blogs = blogs.filter(
@@ -8508,7 +8508,7 @@ class BlogDetailView(APIView):
     GET    /api/blogs/<pk>/   — retrieve single blog
     PUT    /api/blogs/<pk>/   — full update  (called from handleSaveChanges)
     PATCH  /api/blogs/<pk>/   — partial update
-    DELETE /api/blogs/<pk>/   — delete       (called from handleDelete)
+    DELETE /api/blogs/<pk>/   — soft delete, moves blog to trash
     """
     permission_classes = [AllowAny]
 
@@ -8546,8 +8546,13 @@ class BlogDetailView(APIView):
         blog = self._get_blog(pk)
         if not blog:
             return Response({'error': 'Blog not found.'}, status=status.HTTP_404_NOT_FOUND)
-        blog.delete()
-        return Response({'message': 'Blog deleted successfully.'}, status=status.HTTP_200_OK)
+
+        # Soft delete — moves to trash instead of removing from DB
+        from django.utils import timezone
+        blog.is_deleted = True
+        blog.deleted_at = timezone.now()
+        blog.save()
+        return Response({'message': 'Blog moved to trash.'}, status=status.HTTP_200_OK)
 
 
 # ── /api/blogs/grouped/ ───────────────────────────────────────────────────────
@@ -8555,7 +8560,8 @@ class BlogDetailView(APIView):
 class BlogsGroupedView(APIView):
     """
     GET /api/blogs/grouped/
-    Returns blogs grouped by category name — exact match for publishedBlogs shape:
+    Returns non-deleted blogs grouped by category name.
+    Matches the publishedBlogs shape in your React frontend:
     {
         "Technology": [ {...blog}, ... ],
         "Lifestyle":  [ {...blog} ]
@@ -8575,7 +8581,8 @@ class BlogsGroupedView(APIView):
 
         result = {}
         for cat in categories:
-            blogs = cat.blogs.all()
+            # Always exclude soft-deleted blogs
+            blogs = cat.blogs.filter(is_deleted=False)
             if search:
                 blogs = blogs.filter(
                     Q(title__icontains=search) | Q(category__name__icontains=search)
@@ -8609,11 +8616,13 @@ class BlogCategoryListCreateView(APIView):
         return Response(BlogCategorySerializer(cat).data, status=status.HTTP_201_CREATED)
 
 
+# ── /api/blog-categories/<pk>/ ───────────────────────────────────────────────
+
 class BlogCategoryDetailView(APIView):
     """
     GET    /api/blog-categories/<pk>/   — retrieve + all its blogs
     PATCH  /api/blog-categories/<pk>/   — rename
-    DELETE /api/blog-categories/<pk>/   — delete (cascades to all blogs)
+    DELETE /api/blog-categories/<pk>/   — delete category (cascades to all blogs)
     """
     permission_classes = [AllowAny]
 
@@ -8653,14 +8662,15 @@ class BlogCategoryDetailView(APIView):
 class BlogStatsView(APIView):
     """
     GET /api/blog-stats/
-    Powers the 4 dashboard cards in AdminBlogPost:
-    { total, published, drafts }
+    Powers all 4 dashboard cards in AdminBlogPost:
+    { total, published, drafts, trash }
     """
     permission_classes = [AllowAny]
 
     def get(self, request):
         return Response({
-            'total':     Blog.objects.count(),
-            'published': Blog.objects.filter(status='Published').count(),
-            'drafts':    Blog.objects.filter(status='Draft').count(),
+            'total':     Blog.objects.filter(is_deleted=False).count(),
+            'published': Blog.objects.filter(status='Published', is_deleted=False).count(),
+            'drafts':    Blog.objects.filter(status='Draft', is_deleted=False).count(),
+            'trash':     Blog.objects.filter(is_deleted=True).count(),
         })
