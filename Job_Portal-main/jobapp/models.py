@@ -2605,3 +2605,13 @@ class PointContent(models.Model):
 
     def __str__(self):
         return f"Content[{self.order}] for Point {self.point.id}"
+
+
+class AccountManagerAssignment(models.Model):
+    employer    = models.OneToOneField(User, on_delete=models.CASCADE, related_name='account_manager')
+    manager     = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='managed_accounts')
+    assigned_at = models.DateTimeField(auto_now_add=True)
+    note        = models.TextField(blank=True)  # optional admin note
+
+    def __str__(self):
+        return f"{self.employer.username} → {self.manager.username if self.manager else 'Unassigned'}"

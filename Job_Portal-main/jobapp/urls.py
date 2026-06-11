@@ -2,6 +2,7 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     AJobListView,
+    AccountManagerEmployerListView,
     Admin2FAStatusView,
     AdminAccessLogListView,
     AdminChangePasswordView,
@@ -21,6 +22,7 @@ from .views import (
     AdminComplaintDetailView,
     AdminJobDetailView,
     ApplicationFlagReadStatusView,
+    AssignAccountManagerView,
     CompanyProfileCreateView,
     ContactMessageStatusUpdateAPIView,
     DashboardView,
@@ -36,6 +38,7 @@ from .views import (
     MarkNotificationUnreadView,
     DeleteNotificationView,
     ClearAllNotificationsView,
+    MyAccountManagerView,
     NewsletterSubscribeAPIView,
     PlanListCreateView,
     RevokeTrustedDeviceView,
@@ -403,5 +406,11 @@ urlpatterns = [
     path('blog-categories/', BlogCategoryListCreateView.as_view(), name='blog-category-list-create'),
     path('blog-categories/<int:pk>/', BlogCategoryDetailView.as_view(), name='blog-category-detail'),
     path('blog-stats/', BlogStatsView.as_view(), name='blog-stats'),
+
+
+
+    path('my-account-manager/',        MyAccountManagerView.as_view()),
+    path('my-employers/',              AccountManagerEmployerListView.as_view()),
+    path('assign-account-manager/',    AssignAccountManagerView.as_view()),
 
 ]

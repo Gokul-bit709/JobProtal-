@@ -8674,3 +8674,73 @@ class BlogStatsView(APIView):
             'drafts':    Blog.objects.filter(status='Draft', is_deleted=False).count(),
             'trash':     Blog.objects.filter(is_deleted=True).count(),
         })
+
+
+# Employer — see my account manager
+class MyAccountManagerView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        subscription = Subscription.objects.filter(
+            user=request.user, status='active'
+        ).select_related('plan').first()
+
+        if not subscription or not subscription.plan.Account_Manager:
+            return Response(
+                {"error": "Your plan does not include an Account Manager."},
+                status=403
+            )
+
+        try:
+            assignment = AccountManagerAssignment.objects.select_related('manager').get(
+                employer=request.user
+            )
+            return Response({
+                "manager_name":  assignment.manager.get_full_name(),
+                "manager_email": assignment.manager.email,
+                "assigned_at":   assignment.assigned_at,
+            })
+        except AccountManagerAssignment.DoesNotExist:
+            return Response({"message": "Account manager will be assigned shortly."})
+
+
+# Admin — see all employers assigned to me
+class AccountManagerEmployerListView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        assignments = AccountManagerAssignment.objects.filter(
+            manager=request.user
+        ).select_related('employer')
+        data = [
+            {
+                "employer_id":    a.employer.id,
+                "employer_name":  a.employer.get_full_name(),
+                "employer_email": a.employer.email,
+                "assigned_at":    a.assigned_at,
+            }
+            for a in assignments
+        ]
+        return Response(data)
+
+
+# Admin — manually assign or reassign
+class AssignAccountManagerView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        employer_id = request.data.get('employer_id')
+        manager_id  = request.data.get('manager_id')
+
+        try:
+            employer = User.objects.get(id=employer_id)
+            manager  = User.objects.get(id=manager_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found."}, status=404)
+
+        assignment, created = AccountManagerAssignment.objects.update_or_create(
+            employer=employer,
+            defaults={'manager': manager}
+        )
+        action = "Assigned" if created else "Reassigned"
+        return Response({"message": f"{action} {manager.get_full_name()} to {employer.get_full_name()}"})

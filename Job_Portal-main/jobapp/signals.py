@@ -2,8 +2,12 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import Notification, Message
+from django.db import models
+from django.contrib.auth import get_user_model
+from .models import Notification, Message, Subscription, AccountManagerAssignment
 from .services import NotificationService
+
+User = get_user_model()
 '''
 # Signal for sending email when notification is created
 @receiver(post_save, sender=Notification)
@@ -48,4 +52,18 @@ def create_message_notification(sender, instance, created, **kwargs):
                 ),
                 notification_type='message',
                 related_object_id=instance.conversation.id
+            )
+        
+@receiver(post_save, sender=Subscription)
+def handle_account_manager(sender, instance, created, **kwargs):
+    if created and instance.plan.Account_Manager:
+        # Pick least-busy staff/admin
+        manager = User.objects.filter(user_type='admin').annotate(
+            count=models.Count('managed_accounts')
+        ).order_by('count').first()
+
+        if manager:
+            AccountManagerAssignment.objects.update_or_create(
+                employer=instance.user,
+                defaults={'manager': manager}
             )
